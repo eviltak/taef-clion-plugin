@@ -1,5 +1,6 @@
 package com.github.eviltak.taef
 
+import com.intellij.execution.ExecutionTarget
 import com.intellij.execution.Executor
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.LocatableConfigurationBase
@@ -22,6 +23,9 @@ class TaefRunConfiguration(
     override fun suggestedName(): String? =
         options.cmakeTarget?.takeIf { it.isNotBlank() }
             ?: options.testDllPath?.takeIf { it.isNotBlank() }
+
+    override fun canRunOn(target: ExecutionTarget): Boolean =
+        target is TaefBuildProfileExecutionTarget
 
     override fun getConfigurationEditor(): SettingsEditor<TaefRunConfiguration> =
         TaefSettingsEditor(project)

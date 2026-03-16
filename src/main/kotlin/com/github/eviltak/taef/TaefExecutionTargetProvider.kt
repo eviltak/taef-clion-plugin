@@ -16,6 +16,7 @@ class TaefBuildProfileExecutionTarget(val profileName: String) : ExecutionTarget
     override fun getId(): String = "TaefBuildProfile:$profileName"
     override fun getDisplayName(): String = profileName
     override fun getIcon(): Icon? = null
+    override fun getGroupName(): String = "TAEF Build Profiles"
     override fun canRun(configuration: RunConfiguration): Boolean =
         configuration is TaefRunConfiguration
 }

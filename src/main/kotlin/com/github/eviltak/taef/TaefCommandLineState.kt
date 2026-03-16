@@ -43,8 +43,13 @@ class TaefCommandLineState(
         val target = helper.targets.find { it.name == targetName }
             ?: throw ExecutionException("CMake target '$targetName' not found in project")
 
-        val cmakeConfig = helper.getDefaultConfiguration(target)
-            ?: throw ExecutionException("No CMake configuration found for target '$targetName'")
+        // Use the profile selected in the toolbar, or fall back to default
+        val profileName = (environment.executionTarget as? TaefBuildProfileExecutionTarget)?.profileName
+        val cmakeConfig = if (profileName != null) {
+            helper.findConfiguration(target, profileName)
+        } else {
+            helper.getDefaultConfiguration(target)
+        } ?: throw ExecutionException("No CMake configuration found for target '$targetName'")
 
         val productFile = cmakeConfig.productFile
             ?: throw ExecutionException("Could not resolve output file for target '$targetName'")

@@ -60,7 +60,14 @@ class TaefBeforeRunTaskProvider : BeforeRunTaskProvider<TaefBuildBeforeRunTask>(
         val project = configuration.project
         val helper = CMakeBuildConfigurationHelper(project)
         val target = helper.targets.find { it.name == targetName } ?: return false
-        val cmakeConfig = helper.getDefaultConfiguration(target) ?: return false
+
+        // Use the profile selected in the toolbar, or fall back to default
+        val profileName = (environment.executionTarget as? TaefBuildProfileExecutionTarget)?.profileName
+        val cmakeConfig = if (profileName != null) {
+            helper.findConfiguration(target, profileName)
+        } else {
+            helper.getDefaultConfiguration(target)
+        } ?: return false
 
         val buildAndRun = CMakeAppRunConfiguration.BuildAndRunConfigurations(cmakeConfig)
         val buildableElements = CMakeBuild.getBuildableElements(buildAndRun)

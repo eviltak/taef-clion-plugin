@@ -63,6 +63,17 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     /**
+     * Tests execution target provider and profile-aware DLL resolution.
+     */
+    fun testProfileSelectionAndTargetProvider() {
+        if (!cmakeLoaded) return
+
+        assertExecutionTargetProviderReturnProfiles()
+        assertExecutionTargetProviderIgnoresNonTaefConfigs()
+        assertDllResolutionUsesSelectedProfile()
+    }
+
+    /**
      * Tests before-run task: creation, filtering, description with target name.
      */
     fun testBeforeRunTask() {
@@ -187,6 +198,58 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         assertEquals(TaefBeforeRunTaskProvider.DEFAULT_DESCRIPTION, provider.getDescription(taskNoTarget))
     }
 
+    // --- Profile selection assertions ---
+
+    private fun assertExecutionTargetProviderReturnProfiles() {
+        val provider = TaefExecutionTargetProvider()
+        val config = createTaefConfig()
+        val targets = provider.getTargets(project, config)
+
+        assertFalse("Should return at least one profile", targets.isEmpty())
+        assertTrue(
+            "Targets should be TaefBuildProfileExecutionTarget",
+            targets.all { it is TaefBuildProfileExecutionTarget }
+        )
+
+        val profileNames = targets.map { (it as TaefBuildProfileExecutionTarget).profileName }
+        assertTrue(
+            "Should contain a profile name (e.g. Debug), got: $profileNames",
+            profileNames.any { it.isNotBlank() }
+        )
+    }
+
+    private fun assertExecutionTargetProviderIgnoresNonTaefConfigs() {
+        val provider = TaefExecutionTargetProvider()
+        val otherConfig = com.intellij.execution.configurations.UnknownRunConfiguration(
+            com.intellij.execution.configurations.UnknownConfigurationType.getInstance(),
+            project
+        )
+        val targets = provider.getTargets(project, otherConfig)
+        assertTrue("Should return empty for non-TAEF config", targets.isEmpty())
+    }
+
+    private fun assertDllResolutionUsesSelectedProfile() {
+        val config = createTaefConfig()
+        config.options.teExePath = "C:\\tools\\te.exe"
+        config.options.cmakeTarget = "SampleTests"
+
+        // Get available profiles
+        val provider = TaefExecutionTargetProvider()
+        val profileTargets = provider.getTargets(project, config)
+        assertTrue("Need at least one profile for this test", profileTargets.isNotEmpty())
+
+        val profileTarget = profileTargets[0] as TaefBuildProfileExecutionTarget
+        val env = createExecutionEnvironmentWithTarget(config, profileTarget)
+        val state = TaefCommandLineState(env, config)
+        val dllPath = state.resolveTestDllPath()
+
+        assertTrue(
+            "DLL path should contain the profile name '${profileTarget.profileName}', got: $dllPath",
+            dllPath.contains(profileTarget.profileName, ignoreCase = true)
+        )
+        assertTrue("Should still end with SampleTests.dll", dllPath.endsWith("SampleTests.dll"))
+    }
+
     // --- Infrastructure helpers ---
 
     private fun createTaefConfig(): TaefRunConfiguration {
@@ -203,6 +266,19 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
             .createConfiguration(config, config.factory!!)
         return com.intellij.execution.runners.ExecutionEnvironmentBuilder
             .create(executor, settings)
+            .build()
+    }
+
+    private fun createExecutionEnvironmentWithTarget(
+        config: TaefRunConfiguration,
+        target: com.intellij.execution.ExecutionTarget
+    ): com.intellij.execution.runners.ExecutionEnvironment {
+        val executor = com.intellij.execution.executors.DefaultRunExecutor.getRunExecutorInstance()
+        val settings = com.intellij.execution.RunManager.getInstance(project)
+            .createConfiguration(config, config.factory!!)
+        return com.intellij.execution.runners.ExecutionEnvironmentBuilder
+            .create(executor, settings)
+            .target(target)
             .build()
     }
 

@@ -17,7 +17,7 @@ import javax.swing.Icon
 
 private val BEFORE_RUN_TASK_ID: Key<TaefBuildBeforeRunTask> = Key.create("TaefBuildBeforeRunTask")
 
-class TaefBuildBeforeRunTask :
+class TaefBuildBeforeRunTask(val targetName: String? = null) :
     BeforeRunTask<TaefBuildBeforeRunTask>(BEFORE_RUN_TASK_ID) {
     init {
         isEnabled = true
@@ -26,17 +26,21 @@ class TaefBuildBeforeRunTask :
 
 class TaefBeforeRunTaskProvider : BeforeRunTaskProvider<TaefBuildBeforeRunTask>() {
 
+    companion object {
+        const val DEFAULT_DESCRIPTION = "Build TAEF Test DLL"
+    }
+
     override fun getId(): Key<TaefBuildBeforeRunTask> = BEFORE_RUN_TASK_ID
-    override fun getName(): String = "Build TAEF Test DLL"
+    override fun getName(): String = DEFAULT_DESCRIPTION
     override fun getIcon(): Icon = AllIcons.Actions.Compile
-    override fun getDescription(task: TaefBuildBeforeRunTask): String =
-        "Build TAEF test DLL via CMake"
+    override fun getDescription(task: TaefBuildBeforeRunTask): String {
+        val target = task.targetName
+        return if (!target.isNullOrBlank()) "Build '$target'" else DEFAULT_DESCRIPTION
+    }
 
     override fun createTask(runConfiguration: RunConfiguration): TaefBuildBeforeRunTask? {
-        if (runConfiguration is TaefRunConfiguration) {
-            return TaefBuildBeforeRunTask()
-        }
-        return null
+        if (runConfiguration !is TaefRunConfiguration) return null
+        return TaefBuildBeforeRunTask(runConfiguration.options.cmakeTarget)
     }
 
     override fun executeTask(

@@ -63,11 +63,12 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     /**
-     * Tests before-run task: creation filtering (no CMake reload needed).
+     * Tests before-run task: creation, filtering, description with target name.
      */
-    fun testBeforeRunTaskCreation() {
+    fun testBeforeRunTask() {
         assertTaskCreatedForTaefConfig()
         assertTaskNotCreatedForOtherConfig()
+        assertTaskDescriptionContainsTargetName()
     }
 
     // --- Target discovery assertions ---
@@ -171,6 +172,19 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
             project
         )
         assertNull("Should not create task for non-TAEF config", provider.createTask(otherConfig))
+    }
+
+    private fun assertTaskDescriptionContainsTargetName() {
+        val provider = TaefBeforeRunTaskProvider()
+
+        val configWithTarget = createTaefConfig()
+        configWithTarget.options.cmakeTarget = "SampleTests"
+        val taskWithTarget = provider.createTask(configWithTarget)!!
+        assertEquals("Build 'SampleTests'", provider.getDescription(taskWithTarget))
+
+        val configNoTarget = createTaefConfig()
+        val taskNoTarget = provider.createTask(configNoTarget)!!
+        assertEquals(TaefBeforeRunTaskProvider.DEFAULT_DESCRIPTION, provider.getDescription(taskNoTarget))
     }
 
     // --- Infrastructure helpers ---

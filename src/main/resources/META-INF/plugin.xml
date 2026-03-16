@@ -1,0 +1,16 @@
+<idea-plugin>
+    <id>com.github.eviltak.taef</id>
+    <name>TAEF Test Runner</name>
+    <vendor>eviltak</vendor>
+    <description><![CDATA[
+        Run and debug TAEF (Test Authoring and Execution Framework) tests in CLion.
+        Provides run configurations, gutter icons, and test result trees for TAEF tests.
+    ]]></description>
+
+    <depends>com.intellij.modules.clion</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <configurationType implementation="com.github.eviltak.taef.TaefConfigurationType"/>
+        <stepsBeforeRunProvider implementation="com.github.eviltak.taef.TaefBeforeRunTaskProvider"/>
+    </extensions>
+</idea-plugin>

@@ -1,0 +1,35 @@
+package com.github.eviltak.taef
+
+import com.intellij.execution.Executor
+import com.intellij.execution.configurations.ConfigurationFactory
+import com.intellij.execution.configurations.RunConfigurationBase
+import com.intellij.execution.configurations.RunProfileState
+import com.intellij.execution.configurations.RuntimeConfigurationError
+import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.openapi.options.SettingsEditor
+import com.intellij.openapi.project.Project
+
+class TaefRunConfiguration(
+    project: Project,
+    factory: ConfigurationFactory,
+    name: String
+) : RunConfigurationBase<TaefRunConfigurationOptions>(project, factory, name) {
+
+    public override fun getOptions(): TaefRunConfigurationOptions =
+        super.getOptions() as TaefRunConfigurationOptions
+
+    override fun getConfigurationEditor(): SettingsEditor<TaefRunConfiguration> =
+        TaefSettingsEditor(project)
+
+    override fun checkConfiguration() {
+        if (options.teExePath.isNullOrBlank()) {
+            throw RuntimeConfigurationError("TE.exe path is not specified")
+        }
+        if (options.cmakeTarget.isNullOrBlank() && options.testDllPath.isNullOrBlank()) {
+            throw RuntimeConfigurationError("Select a CMake target or specify a test DLL path")
+        }
+    }
+
+    override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState =
+        TaefCommandLineState(environment, this)
+}

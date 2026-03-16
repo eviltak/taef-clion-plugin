@@ -1,0 +1,13 @@
+# JetBrains / Gradle
+.DS_Store
+.gradle
+.idea
+.intellijPlatform
+.kotlin
+.qodana
+build
+*.iml
+out
+
+# CMake build directories
+cmake-build-*/

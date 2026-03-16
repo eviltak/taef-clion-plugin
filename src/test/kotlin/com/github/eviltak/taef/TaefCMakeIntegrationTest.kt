@@ -3,6 +3,7 @@ package com.github.eviltak.taef
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.HeavyPlatformTestCase
+import com.jetbrains.cidr.cpp.cmake.CMakeSettings
 import com.jetbrains.cidr.cpp.cmake.workspace.CMakeWorkspace
 import com.jetbrains.cidr.cpp.execution.CMakeAppRunConfiguration
 import com.jetbrains.cidr.cpp.execution.CMakeBuildConfigurationHelper
@@ -28,6 +29,7 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     override fun setUp() {
         super.setUp()
         copySampleProjectIntoTestProject()
+        addReleaseCMakeProfile()
         cmakeLoaded = reloadCMakeWorkspace()
     }
 
@@ -71,6 +73,7 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         assertExecutionTargetProviderReturnProfiles()
         assertExecutionTargetProviderIgnoresNonTaefConfigs()
         assertDllResolutionUsesSelectedProfile()
+        assertLauncherResolvesProfileEnvironment()
     }
 
     /**
@@ -165,6 +168,36 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         } catch (e: Exception) {
             assertTrue("Error should mention target name", e.message!!.contains("NonExistentTarget"))
         }
+    }
+
+    // --- Launcher profile resolution assertions ---
+
+    private fun assertLauncherResolvesProfileEnvironment() {
+        val workspace = com.jetbrains.cidr.cpp.cmake.workspace.CMakeWorkspace.getInstance(project)
+        val profileNames = workspace.modelConfigurationData.map { it.configName }
+
+        // Find a non-default profile to ensure we're testing profile selection
+        val helper = CMakeBuildConfigurationHelper(project)
+        val target = helper.targets.find { it.name == "SampleTests" }!!
+        val defaultProfileName = helper.getDefaultConfiguration(target)?.profileName
+        val nonDefaultProfile = profileNames.find { it != defaultProfileName }
+            ?: return fail("Need at least 2 CMake profiles to test profile-aware launcher (add a Release profile)")
+
+        val profileInfo = workspace.getCMakeProfileInfoByName(nonDefaultProfile)
+        assertNotNull("Profile info should be found for '$nonDefaultProfile'", profileInfo)
+
+        val env = profileInfo!!.getEnvironmentSafe(false)
+        assertNotNull("CPPEnvironment should be resolved for profile '$nonDefaultProfile'", env)
+        assertNotNull("Toolchain should be set for profile '$nonDefaultProfile'", env.toolchain)
+
+        // Verify launcher can be created with this non-default profile via execution target
+        val config = createTaefConfig()
+        config.options.teExePath = "C:\\tools\\te.exe"
+        config.options.cmakeTarget = "SampleTests"
+
+        val profileTarget = TaefBuildProfileExecutionTarget(nonDefaultProfile)
+        val launcher = TaefLauncher(createExecutionEnvironmentWithTarget(config, profileTarget), config)
+        assertNotNull(launcher)
     }
 
     // --- Before-run task assertions ---
@@ -296,6 +329,15 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         val vDir = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(projectRoot)
         assertNotNull("Project VFS root should exist", vDir)
         WriteAction.runAndWait<Throwable> { vDir!!.refresh(false, true) }
+    }
+
+    private fun addReleaseCMakeProfile() {
+        val settings = CMakeSettings.getInstance(project)
+        val profiles = settings.profiles.toMutableList()
+        if (profiles.none { it.name == "Release" }) {
+            profiles.add(CMakeSettings.Profile("Release"))
+            settings.setProfiles(profiles)
+        }
     }
 
     private fun reloadCMakeWorkspace(): Boolean {

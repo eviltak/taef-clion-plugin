@@ -3,17 +3,18 @@ package com.github.eviltak.taef
 import com.intellij.execution.Executor
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.LocatableConfigurationBase
-import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
+import com.jetbrains.cidr.execution.CidrCommandLineState
+import com.jetbrains.cidr.execution.CidrRunProfile
 
 class TaefRunConfiguration(
     project: Project,
     factory: ConfigurationFactory,
     name: String
-) : LocatableConfigurationBase<TaefRunConfigurationOptions>(project, factory, name) {
+) : LocatableConfigurationBase<TaefRunConfigurationOptions>(project, factory, name), CidrRunProfile {
 
     public override fun getOptions(): TaefRunConfigurationOptions =
         super.getOptions() as TaefRunConfigurationOptions
@@ -34,6 +35,6 @@ class TaefRunConfiguration(
         }
     }
 
-    override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState =
-        TaefCommandLineState(environment, this)
+    override fun getState(executor: Executor, environment: ExecutionEnvironment): CidrCommandLineState =
+        CidrCommandLineState(environment, TaefLauncher(environment, this))
 }

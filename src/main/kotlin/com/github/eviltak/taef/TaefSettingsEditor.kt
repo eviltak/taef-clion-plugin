@@ -65,6 +65,7 @@ class TaefSettingsEditor(private val project: Project) : SettingsEditor<TaefRunC
             LOG.info("CMake workspace not available, target combo will be empty", e)
         }
         cmakeTargetCombo.model = model
+        cmakeTargetCombo.addActionListener { fireEditorStateChanged() }
     }
 
     override fun resetEditorFrom(config: TaefRunConfiguration) {

@@ -2,7 +2,7 @@ package com.github.eviltak.taef
 
 import com.intellij.execution.Executor
 import com.intellij.execution.configurations.ConfigurationFactory
-import com.intellij.execution.configurations.RunConfigurationBase
+import com.intellij.execution.configurations.LocatableConfigurationBase
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.execution.runners.ExecutionEnvironment
@@ -13,10 +13,14 @@ class TaefRunConfiguration(
     project: Project,
     factory: ConfigurationFactory,
     name: String
-) : RunConfigurationBase<TaefRunConfigurationOptions>(project, factory, name) {
+) : LocatableConfigurationBase<TaefRunConfigurationOptions>(project, factory, name) {
 
     public override fun getOptions(): TaefRunConfigurationOptions =
         super.getOptions() as TaefRunConfigurationOptions
+
+    override fun suggestedName(): String? =
+        options.cmakeTarget?.takeIf { it.isNotBlank() }
+            ?: options.testDllPath?.takeIf { it.isNotBlank() }
 
     override fun getConfigurationEditor(): SettingsEditor<TaefRunConfiguration> =
         TaefSettingsEditor(project)

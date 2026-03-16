@@ -59,6 +59,24 @@ class TaefRunConfigurationIntegrationTest : BasePlatformTestCase() {
         config.checkConfiguration()
     }
 
+    // --- Suggested name ---
+
+    fun testSuggestedName() {
+        val config = createConfig()
+        // isGeneratedName requires suggestedName() != null, so false when no target set
+        assertNull("Should be null when nothing is set", config.suggestedName())
+
+        config.options.cmakeTarget = "SampleTests"
+        assertEquals("SampleTests", config.suggestedName())
+        assertTrue("Should be generated name when target is set", config.isGeneratedName)
+
+        config.options.testDllPath = "C:\\path\\to\\test.dll"
+        assertEquals("SampleTests", config.suggestedName())
+
+        config.options.cmakeTarget = ""
+        assertEquals("C:\\path\\to\\test.dll", config.suggestedName())
+    }
+
     // --- Options persistence round-trip ---
 
     fun testOptionsPersistence() {

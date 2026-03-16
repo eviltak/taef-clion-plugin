@@ -1,8 +1,8 @@
 package com.github.eviltak.taef
 
-import com.intellij.execution.configurations.RunConfigurationOptions
+import com.intellij.execution.configurations.LocatableRunConfigurationOptions
 
-class TaefRunConfigurationOptions : RunConfigurationOptions() {
+class TaefRunConfigurationOptions : LocatableRunConfigurationOptions() {
     var testDllPath by string("")
     var teExePath by string("")
     var nameFilter by string("")

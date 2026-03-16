@@ -35,7 +35,9 @@ class TaefConfigurationFactory(type: ConfigurationType) : ConfigurationFactory(t
     override fun getId(): String = ID
 
     override fun createTemplateConfiguration(project: Project): RunConfiguration =
-        TaefRunConfiguration(project, this, TaefConfigurationType.DISPLAY_NAME)
+        TaefRunConfiguration(project, this, TaefConfigurationType.DISPLAY_NAME).apply {
+            setGeneratedName()
+        }
 
     override fun getOptionsClass(): Class<out RunConfigurationOptions> =
         TaefRunConfigurationOptions::class.java

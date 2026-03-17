@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+    <!-- Test tube body -->
+    <rect x="14" y="3" width="12" height="4" rx="2" fill="#6B7280"/>
+    <rect x="16" y="7" width="8" height="18" fill="#3B82F6"/>
+    <!-- Liquid in tube -->
+    <rect x="16" y="16" width="8" height="9" fill="#60A5FA" opacity="0.5"/>
+    <!-- Tube bottom (rounded) -->
+    <path d="M16 25 L13 30 Q12 33 14 33 L26 33 Q28 33 27 30 L24 25Z" fill="#3B82F6"/>
+    <!-- TAEF label -->
+    <text x="20" y="39" font-family="Arial,sans-serif" font-size="7" font-weight="bold" fill="#3B82F6" text-anchor="middle">TAEF</text>
+</svg>

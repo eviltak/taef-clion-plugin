@@ -4,8 +4,8 @@ import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.ConfigurationType
 import com.intellij.execution.configurations.RunConfiguration
 import com.intellij.execution.configurations.RunConfigurationOptions
-import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.IconLoader
 import javax.swing.Icon
 
 class TaefConfigurationType : ConfigurationType {
@@ -14,13 +14,14 @@ class TaefConfigurationType : ConfigurationType {
         const val ID = "TaefRunConfiguration"
         const val DISPLAY_NAME = "TAEF Test"
         const val DESCRIPTION = "Run TAEF tests via TE.exe"
+        private const val ICON_PATH = "/icons/taef.svg"
     }
 
     private val factory = TaefConfigurationFactory(this)
 
     override fun getDisplayName(): String = DISPLAY_NAME
     override fun getConfigurationTypeDescription(): String = DESCRIPTION
-    override fun getIcon(): Icon = AllIcons.RunConfigurations.TestState.Run
+    override fun getIcon(): Icon = IconLoader.getIcon(ICON_PATH, TaefConfigurationType::class.java)
     override fun getId(): String = ID
     override fun getConfigurationFactories(): Array<ConfigurationFactory> = arrayOf(factory)
 }

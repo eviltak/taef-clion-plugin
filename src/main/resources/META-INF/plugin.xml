@@ -11,7 +11,5 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <configurationType implementation="com.github.eviltak.taef.TaefConfigurationType"/>
-        <stepsBeforeRunProvider implementation="com.github.eviltak.taef.TaefBeforeRunTaskProvider"/>
-        <executionTargetProvider implementation="com.github.eviltak.taef.TaefExecutionTargetProvider"/>
     </extensions>
 </idea-plugin>

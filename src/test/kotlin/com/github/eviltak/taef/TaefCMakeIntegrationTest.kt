@@ -1,5 +1,9 @@
 package com.github.eviltak.taef
 
+import com.intellij.execution.RunManager
+import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.execution.runners.ExecutionEnvironmentBuilder
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.HeavyPlatformTestCase
@@ -7,13 +11,16 @@ import com.jetbrains.cidr.cpp.cmake.CMakeSettings
 import com.jetbrains.cidr.cpp.cmake.workspace.CMakeWorkspace
 import com.jetbrains.cidr.cpp.execution.CMakeAppRunConfiguration
 import com.jetbrains.cidr.cpp.execution.CMakeBuildConfigurationHelper
+import com.jetbrains.cidr.cpp.execution.CMakeLauncher
 import com.jetbrains.cidr.cpp.execution.build.CMakeBuild
+import com.intellij.execution.DefaultExecutionTarget
+import com.jetbrains.cidr.execution.BuildTargetAndConfigurationData
 import java.io.File
 
 /**
  * Heavy integration tests that load the sample CMake project and verify
  * the full plugin pipeline: CMake target discovery, DLL path resolution,
- * run configuration creation + validation, before-run task scoping.
+ * run configuration creation + validation, launcher creation.
  *
  * Uses HeavyPlatformTestCase with CMakeWorkspace reload to get a real
  * CMake model. Uses CLion's bundled toolchain — no environment deps.
@@ -53,36 +60,27 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     /**
-     * Tests run config pipeline: validation, DLL resolution, overrides, error handling.
+     * Tests run config pipeline: target setting via parent API, validation,
+     * DLL resolution through getBuildAndRunConfigurations, suggested name.
      */
-    fun testRunConfigDllResolutionPipeline() {
+    fun testRunConfigPipeline() {
         if (!cmakeLoaded) return
 
         assertCMakeTargetPassesValidation()
         assertCMakeTargetResolvesToDll()
-        assertManualDllOverridesTakesPriority()
-        assertInvalidTargetProducesMeaningfulError()
+        assertSuggestedNameIncludesTaefPrefix()
+        assertParentFieldsPersistAlongsideTaefFields()
     }
 
     /**
-     * Tests execution target provider and profile-aware DLL resolution.
+     * Tests launcher: creation, type hierarchy, executable swap, arg injection.
      */
-    fun testProfileSelectionAndTargetProvider() {
+    fun testLauncher() {
         if (!cmakeLoaded) return
 
-        assertExecutionTargetProviderReturnProfiles()
-        assertExecutionTargetProviderIgnoresNonTaefConfigs()
-        assertDllResolutionUsesSelectedProfile()
-        assertLauncherResolvesProfileEnvironment()
-    }
-
-    /**
-     * Tests before-run task: creation, filtering, description with target name.
-     */
-    fun testBeforeRunTask() {
-        assertTaskCreatedForTaefConfig()
-        assertTaskNotCreatedForOtherConfig()
-        assertTaskDescriptionContainsTargetName()
+        assertLauncherCanBeCreated()
+        assertLauncherExtendsCMakeLauncher()
+        assertLauncherSwapsExecutableAndInjectsDllArg()
     }
 
     // --- Target discovery assertions ---
@@ -131,187 +129,147 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
 
     private fun assertCMakeTargetPassesValidation() {
         val config = createTaefConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        config.options.cmakeTarget = "SampleTests"
+        val helper = CMakeBuildConfigurationHelper(project)
+        val target = helper.targets.find { it.name == "SampleTests" }!!
+        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
         config.checkConfiguration()
     }
 
     private fun assertCMakeTargetResolvesToDll() {
         val config = createTaefConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        config.options.cmakeTarget = "SampleTests"
-
-        val state = TaefCommandLineState(createExecutionEnvironment(config), config)
-        val dllPath = state.resolveTestDllPath()
-        assertTrue("Should resolve to SampleTests.dll, got: $dllPath", dllPath.endsWith("SampleTests.dll"))
-    }
-
-    private fun assertManualDllOverridesTakesPriority() {
-        val config = createTaefConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        config.options.cmakeTarget = "SampleTests"
-        config.options.testDllPath = "C:\\override\\test.dll"
-
-        val state = TaefCommandLineState(createExecutionEnvironment(config), config)
-        assertEquals("C:\\override\\test.dll", state.resolveTestDllPath())
-    }
-
-    private fun assertInvalidTargetProducesMeaningfulError() {
-        val config = createTaefConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        config.options.cmakeTarget = "NonExistentTarget"
-
-        val state = TaefCommandLineState(createExecutionEnvironment(config), config)
-        try {
-            state.resolveTestDllPath()
-            fail("Should throw for non-existent target")
-        } catch (e: Exception) {
-            assertTrue("Error should mention target name", e.message!!.contains("NonExistentTarget"))
-        }
-    }
-
-    // --- Launcher profile resolution assertions ---
-
-    private fun assertLauncherResolvesProfileEnvironment() {
-        val workspace = com.jetbrains.cidr.cpp.cmake.workspace.CMakeWorkspace.getInstance(project)
-        val profileNames = workspace.modelConfigurationData.map { it.configName }
-
-        // Find a non-default profile to ensure we're testing profile selection
         val helper = CMakeBuildConfigurationHelper(project)
         val target = helper.targets.find { it.name == "SampleTests" }!!
-        val defaultProfileName = helper.getDefaultConfiguration(target)?.profileName
-        val nonDefaultProfile = profileNames.find { it != defaultProfileName }
-            ?: return fail("Need at least 2 CMake profiles to test profile-aware launcher (add a Release profile)")
+        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
 
-        val profileInfo = workspace.getCMakeProfileInfoByName(nonDefaultProfile)
-        assertNotNull("Profile info should be found for '$nonDefaultProfile'", profileInfo)
+        val buildAndRun = config.getBuildAndRunConfigurations(DefaultExecutionTarget.INSTANCE, null, false)
+        assertNotNull("BuildAndRunConfigurations should be resolved", buildAndRun)
 
-        val env = profileInfo!!.getEnvironmentSafe(false)
-        assertNotNull("CPPEnvironment should be resolved for profile '$nonDefaultProfile'", env)
-        assertNotNull("Toolchain should be set for profile '$nonDefaultProfile'", env.toolchain)
+        val productFile = buildAndRun!!.buildConfiguration.productFile
+        assertNotNull("Product file (DLL) should be resolved", productFile)
+        assertEquals("SampleTests.dll", productFile!!.name)
+    }
 
-        // Verify launcher can be created with this non-default profile via execution target
+    private fun assertSuggestedNameIncludesTaefPrefix() {
         val config = createTaefConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        config.options.cmakeTarget = "SampleTests"
+        val helper = CMakeBuildConfigurationHelper(project)
+        val target = helper.targets.find { it.name == "SampleTests" }!!
+        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
 
-        val profileTarget = TaefBuildProfileExecutionTarget(nonDefaultProfile)
-        val launcher = TaefLauncher(createExecutionEnvironmentWithTarget(config, profileTarget), config)
+        val name = config.suggestedName()
+        assertNotNull("Suggested name should not be null when target is set", name)
+        assertTrue(
+            "Suggested name should start with 'TAEF: ', got: $name",
+            name!!.startsWith("TAEF: ")
+        )
+        assertTrue(
+            "Suggested name should contain target name, got: $name",
+            name.contains("SampleTests")
+        )
+    }
+
+    private fun assertParentFieldsPersistAlongsideTaefFields() {
+        val config = createTaefConfig()
+        val helper = CMakeBuildConfigurationHelper(project)
+        val target = helper.targets.find { it.name == "SampleTests" }!!
+        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        config.nameFilter = "*TestFilter*"
+        config.selectQuery = "@Owner='me'"
+        config.inproc = true
+        config.additionalTeArgs = "/logOutput:High"
+
+        val element = org.jdom.Element("configuration")
+        config.writeExternal(element)
+
+        val restored = createTaefConfig()
+        restored.readExternal(element)
+
+        // Parent fields preserved
+        val restoredTarget = restored.targetAndConfigurationData
+        assertNotNull("Target should be preserved after round-trip", restoredTarget)
+
+        // TAEF fields preserved
+        assertEquals("*TestFilter*", restored.nameFilter)
+        assertEquals("@Owner='me'", restored.selectQuery)
+        assertTrue(restored.inproc)
+        assertEquals("/logOutput:High", restored.additionalTeArgs)
+    }
+
+    // --- Launcher assertions ---
+
+    private fun assertLauncherCanBeCreated() {
+        val config = createTaefConfig()
+        val helper = CMakeBuildConfigurationHelper(project)
+        val target = helper.targets.find { it.name == "SampleTests" }!!
+        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        config.nameFilter = "*Foo*"
+        config.inproc = true
+
+        val env = createExecutionEnvironment(config)
+        val launcher = TaefLauncher(env, config)
         assertNotNull(launcher)
     }
 
-    // --- Before-run task assertions ---
-
-    private fun assertTaskCreatedForTaefConfig() {
-        val provider = TaefBeforeRunTaskProvider()
-        val task = provider.createTask(createTaefConfig())
-        assertNotNull("Should create before-run task for TAEF config", task)
-        assertTrue("Task should be enabled by default", task!!.isEnabled)
-    }
-
-    private fun assertTaskNotCreatedForOtherConfig() {
-        val provider = TaefBeforeRunTaskProvider()
-        val otherConfig = com.intellij.execution.configurations.UnknownRunConfiguration(
-            com.intellij.execution.configurations.UnknownConfigurationType.getInstance(),
-            project
-        )
-        assertNull("Should not create task for non-TAEF config", provider.createTask(otherConfig))
-    }
-
-    private fun assertTaskDescriptionContainsTargetName() {
-        val provider = TaefBeforeRunTaskProvider()
-
-        val configWithTarget = createTaefConfig()
-        configWithTarget.options.cmakeTarget = "SampleTests"
-        val taskWithTarget = provider.createTask(configWithTarget)!!
-        assertEquals("Build 'SampleTests'", provider.getDescription(taskWithTarget))
-
-        val configNoTarget = createTaefConfig()
-        val taskNoTarget = provider.createTask(configNoTarget)!!
-        assertEquals(TaefBeforeRunTaskProvider.DEFAULT_DESCRIPTION, provider.getDescription(taskNoTarget))
-    }
-
-    // --- Profile selection assertions ---
-
-    private fun assertExecutionTargetProviderReturnProfiles() {
-        val provider = TaefExecutionTargetProvider()
+    private fun assertLauncherExtendsCMakeLauncher() {
         val config = createTaefConfig()
-        val targets = provider.getTargets(project, config)
+        val helper = CMakeBuildConfigurationHelper(project)
+        val target = helper.targets.find { it.name == "SampleTests" }!!
+        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
 
-        assertFalse("Should return at least one profile", targets.isEmpty())
-        assertTrue(
-            "Targets should be TaefBuildProfileExecutionTarget",
-            targets.all { it is TaefBuildProfileExecutionTarget }
-        )
-
-        val profileNames = targets.map { (it as TaefBuildProfileExecutionTarget).profileName }
-        assertTrue(
-            "Should contain a profile name (e.g. Debug), got: $profileNames",
-            profileNames.any { it.isNotBlank() }
-        )
+        val env = createExecutionEnvironment(config)
+        val launcher = TaefLauncher(env, config)
+        assertInstanceOf(launcher, CMakeLauncher::class.java)
     }
 
-    private fun assertExecutionTargetProviderIgnoresNonTaefConfigs() {
-        val provider = TaefExecutionTargetProvider()
-        val otherConfig = com.intellij.execution.configurations.UnknownRunConfiguration(
-            com.intellij.execution.configurations.UnknownConfigurationType.getInstance(),
-            project
-        )
-        val targets = provider.getTargets(project, otherConfig)
-        assertTrue("Should return empty for non-TAEF config", targets.isEmpty())
-    }
-
-    private fun assertDllResolutionUsesSelectedProfile() {
+    private fun assertLauncherSwapsExecutableAndInjectsDllArg() {
         val config = createTaefConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        config.options.cmakeTarget = "SampleTests"
+        val helper = CMakeBuildConfigurationHelper(project)
+        val target = helper.targets.find { it.name == "SampleTests" }!!
+        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        config.nameFilter = "*MyTest*"
+        config.inproc = true
 
-        // Get available profiles
-        val provider = TaefExecutionTargetProvider()
-        val profileTargets = provider.getTargets(project, config)
-        assertTrue("Need at least one profile for this test", profileTargets.isNotEmpty())
+        // Set TE.exe as the executable
+        val teExePath = "C:\\tools\\te.exe"
+        config.executableData = com.jetbrains.cidr.execution.ExecutableData(teExePath)
 
-        val profileTarget = profileTargets[0] as TaefBuildProfileExecutionTarget
-        val env = createExecutionEnvironmentWithTarget(config, profileTarget)
-        val state = TaefCommandLineState(env, config)
-        val dllPath = state.resolveTestDllPath()
+        val env = createExecutionEnvironment(config)
+        val launcher = TaefLauncher(env, config)
+        val (runFile, cppEnv) = launcher.getRunFileAndEnvironment()
 
+        // Executable should be TE.exe, not the DLL
+        assertEquals("Run file should be TE.exe", teExePath, runFile.absolutePath)
+
+        // Program parameters should contain the DLL path and TAEF args
+        val programParams = config.programParameters ?: ""
         assertTrue(
-            "DLL path should contain the profile name '${profileTarget.profileName}', got: $dllPath",
-            dllPath.contains(profileTarget.profileName, ignoreCase = true)
+            "Program params should contain SampleTests.dll, got: $programParams",
+            programParams.contains("SampleTests.dll")
         )
-        assertTrue("Should still end with SampleTests.dll", dllPath.endsWith("SampleTests.dll"))
+        assertTrue(
+            "Program params should contain /name:*MyTest*, got: $programParams",
+            programParams.contains("/name:*MyTest*")
+        )
+        assertTrue(
+            "Program params should contain /inproc, got: $programParams",
+            programParams.contains("/inproc")
+        )
     }
 
     // --- Infrastructure helpers ---
 
     private fun createTaefConfig(): TaefRunConfiguration {
         val configType = TaefConfigurationType()
-        val factory = configType.configurationFactories[0]
-        return factory.createTemplateConfiguration(project) as TaefRunConfiguration
+        return configType.factory.createTemplateConfiguration(project) as TaefRunConfiguration
     }
 
     private fun createExecutionEnvironment(
         config: TaefRunConfiguration
-    ): com.intellij.execution.runners.ExecutionEnvironment {
-        val executor = com.intellij.execution.executors.DefaultRunExecutor.getRunExecutorInstance()
-        val settings = com.intellij.execution.RunManager.getInstance(project)
+    ): ExecutionEnvironment {
+        val executor = DefaultRunExecutor.getRunExecutorInstance()
+        val settings = RunManager.getInstance(project)
             .createConfiguration(config, config.factory!!)
-        return com.intellij.execution.runners.ExecutionEnvironmentBuilder
+        return ExecutionEnvironmentBuilder
             .create(executor, settings)
-            .build()
-    }
-
-    private fun createExecutionEnvironmentWithTarget(
-        config: TaefRunConfiguration,
-        target: com.intellij.execution.ExecutionTarget
-    ): com.intellij.execution.runners.ExecutionEnvironment {
-        val executor = com.intellij.execution.executors.DefaultRunExecutor.getRunExecutorInstance()
-        val settings = com.intellij.execution.RunManager.getInstance(project)
-            .createConfiguration(config, config.factory!!)
-        return com.intellij.execution.runners.ExecutionEnvironmentBuilder
-            .create(executor, settings)
-            .target(target)
             .build()
     }
 

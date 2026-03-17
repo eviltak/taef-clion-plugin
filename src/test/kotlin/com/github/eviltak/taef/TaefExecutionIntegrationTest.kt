@@ -1,15 +1,16 @@
 package com.github.eviltak.taef
 
-import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import org.jdom.Element
 
 /**
  * Platform integration tests for TaefRunConfiguration.
- * Tests config creation, validation, and persistence using a real Project instance.
+ * Tests config creation, TAEF field persistence, and command-line building
+ * using a real Project instance (lightweight — no CMake workspace needed).
  */
-class TaefRunConfigurationIntegrationTest : BasePlatformTestCase() {
+class TaefExecutionIntegrationTest : BasePlatformTestCase() {
 
-    // --- Configuration creation & validation ---
+    // --- Configuration creation ---
 
     fun testConfigurationTypeHasCorrectId() {
         val configType = TaefConfigurationType()
@@ -23,94 +24,118 @@ class TaefRunConfigurationIntegrationTest : BasePlatformTestCase() {
         assertInstanceOf(config, TaefRunConfiguration::class.java)
     }
 
-    fun testCheckConfiguration_validConfig() {
+    // --- TAEF fields persistence round-trip ---
+
+    fun testTaefFieldsPersistence() {
         val config = createConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        config.options.testDllPath = "C:\\tests\\test.dll"
-        config.checkConfiguration()
-    }
+        config.nameFilter = "*Foo*"
+        config.selectQuery = "@Priority=1"
+        config.inproc = true
+        config.additionalTeArgs = "/parallel"
 
-    fun testCheckConfiguration_missingTeExe() {
-        val config = createConfig()
-        config.options.testDllPath = "C:\\tests\\test.dll"
-        try {
-            config.checkConfiguration()
-            fail("Should throw RuntimeConfigurationError")
-        } catch (e: RuntimeConfigurationError) {
-            assertTrue(e.localizedMessage.contains("TE.exe"))
-        }
-    }
-
-    fun testCheckConfiguration_missingDllAndTarget() {
-        val config = createConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        try {
-            config.checkConfiguration()
-            fail("Should throw RuntimeConfigurationError")
-        } catch (e: RuntimeConfigurationError) {
-            assertTrue(e.localizedMessage.contains("CMake target") || e.localizedMessage.contains("DLL"))
-        }
-    }
-
-    fun testCheckConfiguration_cmakeTargetSuffices() {
-        val config = createConfig()
-        config.options.teExePath = "C:\\tools\\te.exe"
-        config.options.cmakeTarget = "MyTestTarget"
-        config.checkConfiguration()
-    }
-
-    // --- Suggested name ---
-
-    fun testSuggestedName() {
-        val config = createConfig()
-        // isGeneratedName requires suggestedName() != null, so false when no target set
-        assertNull("Should be null when nothing is set", config.suggestedName())
-
-        config.options.cmakeTarget = "SampleTests"
-        assertEquals("SampleTests", config.suggestedName())
-        assertTrue("Should be generated name when target is set", config.isGeneratedName)
-
-        config.options.testDllPath = "C:\\path\\to\\test.dll"
-        assertEquals("SampleTests", config.suggestedName())
-
-        config.options.cmakeTarget = ""
-        assertEquals("C:\\path\\to\\test.dll", config.suggestedName())
-    }
-
-    // --- Options persistence round-trip ---
-
-    fun testOptionsPersistence() {
-        val config = createConfig()
-        config.options.teExePath = "C:\\te.exe"
-        config.options.testDllPath = "C:\\test.dll"
-        config.options.nameFilter = "*Foo*"
-        config.options.selectQuery = "@Priority=1"
-        config.options.workingDirectory = "C:\\work"
-        config.options.inproc = true
-        config.options.additionalArgs = "/parallel"
-        config.options.cmakeTarget = "MyTarget"
-
-        val element = org.jdom.Element("configuration")
+        val element = Element("configuration")
         config.writeExternal(element)
 
         val restored = createConfig()
         restored.readExternal(element)
 
-        assertEquals("C:\\te.exe", restored.options.teExePath)
-        assertEquals("C:\\test.dll", restored.options.testDllPath)
-        assertEquals("*Foo*", restored.options.nameFilter)
-        assertEquals("@Priority=1", restored.options.selectQuery)
-        assertEquals("C:\\work", restored.options.workingDirectory)
-        assertTrue(restored.options.inproc)
-        assertEquals("/parallel", restored.options.additionalArgs)
-        assertEquals("MyTarget", restored.options.cmakeTarget)
+        assertEquals("*Foo*", restored.nameFilter)
+        assertEquals("@Priority=1", restored.selectQuery)
+        assertTrue(restored.inproc)
+        assertEquals("/parallel", restored.additionalTeArgs)
+    }
+
+    fun testTaefFieldsPersistence_defaults() {
+        val config = createConfig()
+
+        val element = Element("configuration")
+        config.writeExternal(element)
+
+        val restored = createConfig()
+        restored.readExternal(element)
+
+        assertEquals("", restored.nameFilter)
+        assertEquals("", restored.selectQuery)
+        assertFalse(restored.inproc)
+        assertEquals("", restored.additionalTeArgs)
+    }
+
+    // --- buildTaefArgs ---
+
+    fun testBuildTaefArgs_allFields() {
+        val config = createConfig()
+        config.nameFilter = "*Foo*"
+        config.selectQuery = "@Priority=1"
+        config.inproc = true
+        config.additionalTeArgs = "/parallel"
+
+        val args = config.buildTaefArgs()
+        assertTrue(args.contains("/name:*Foo*"))
+        assertTrue(args.contains("/select:\"@Priority=1\""))
+        assertTrue(args.contains("/inproc"))
+        assertTrue(args.contains("/parallel"))
+    }
+
+    fun testBuildTaefArgs_empty() {
+        val config = createConfig()
+        assertEquals("", config.buildTaefArgs())
+    }
+
+    fun testBuildTaefArgs_nameFilterOnly() {
+        val config = createConfig()
+        config.nameFilter = "*Bar*"
+        assertEquals("/name:*Bar*", config.buildTaefArgs())
+    }
+
+    fun testBuildTaefArgs_inprocOnly() {
+        val config = createConfig()
+        config.inproc = true
+        assertEquals("/inproc", config.buildTaefArgs())
+    }
+
+    // --- TaefCommandLineBuilder ---
+
+    fun testCommandLineBuilder_fullParams() {
+        val params = TaefCommandLineParams(
+            teExePath = "C:\\tools\\te.exe",
+            testDllPath = "C:\\tests\\test.dll",
+            nameFilter = "*Foo*",
+            selectQuery = "@Priority=1",
+            inproc = true,
+            additionalArgs = "/parallel",
+            workingDirectory = "C:\\work"
+        )
+        val cmd = TaefCommandLineBuilder.build(params)
+        assertEquals("C:\\tools\\te.exe", cmd.exePath)
+        assertTrue(cmd.parametersList.parameters.contains("C:\\tests\\test.dll"))
+        assertTrue(cmd.parametersList.parameters.contains("/name:*Foo*"))
+        assertTrue(cmd.parametersList.parameters.contains("/inproc"))
+    }
+
+    fun testCommandLineBuilder_missingTeExe() {
+        val params = TaefCommandLineParams(teExePath = null, testDllPath = "C:\\test.dll")
+        try {
+            TaefCommandLineBuilder.build(params)
+            fail("Should throw for missing TE.exe")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("TE.exe"))
+        }
+    }
+
+    fun testCommandLineBuilder_missingDll() {
+        val params = TaefCommandLineParams(teExePath = "C:\\te.exe", testDllPath = null)
+        try {
+            TaefCommandLineBuilder.build(params)
+            fail("Should throw for missing DLL")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("DLL"))
+        }
     }
 
     // --- Helpers ---
 
     private fun createConfig(): TaefRunConfiguration {
         val configType = TaefConfigurationType()
-        val factory = configType.configurationFactories[0]
-        return factory.createTemplateConfiguration(project) as TaefRunConfiguration
+        return configType.factory.createTemplateConfiguration(project) as TaefRunConfiguration
     }
 }

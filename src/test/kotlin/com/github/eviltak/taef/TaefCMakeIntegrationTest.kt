@@ -60,6 +60,16 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     /**
+     * Tests Tier 1 detection: TaefTestFrameworkDetector identifies MODULE targets.
+     */
+    fun testFrameworkDetector() {
+        if (!cmakeLoaded) return
+
+        assertDetectorIdentifiesTaefTarget()
+        assertDetectorRejectsNonModuleTargets()
+    }
+
+    /**
      * Tests run config pipeline: target setting via parent API, validation,
      * DLL resolution through getBuildAndRunConfigurations, suggested name.
      */
@@ -81,6 +91,38 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         assertLauncherCanBeCreated()
         assertLauncherExtendsCMakeLauncher()
         assertLauncherSwapsExecutableAndInjectsDllArg()
+    }
+
+    // --- Framework detector assertions ---
+
+    private fun assertDetectorIdentifiesTaefTarget() {
+        val detector = TaefTestFrameworkDetector()
+        val helper = CMakeBuildConfigurationHelper(project)
+        val target = helper.targets.find { it.name == "SampleTests" }!!
+
+        assertTrue(
+            "Detector should identify SampleTests as a TAEF target",
+            detector.hasTestConfiguration(target, helper)
+        )
+        assertEquals(
+            "Detector should return TaefConfigurationType",
+            TaefConfigurationType.ID,
+            detector.testConfigurationType.id
+        )
+    }
+
+    private fun assertDetectorRejectsNonModuleTargets() {
+        val detector = TaefTestFrameworkDetector()
+        val helper = CMakeBuildConfigurationHelper(project)
+
+        // SampleApp is an executable that uses TAEF macros — detector should reject it
+        // because TE.exe only loads MODULE libraries (DLLs)
+        val appTarget = helper.targets.find { it.name == "SampleApp" }
+        assertNotNull("SampleApp target should exist", appTarget)
+        assertFalse(
+            "Detector should reject executable target 'SampleApp' even though it has TAEF macros",
+            detector.hasTestConfiguration(appTarget!!, helper)
+        )
     }
 
     // --- Target discovery assertions ---

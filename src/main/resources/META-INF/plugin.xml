@@ -12,4 +12,8 @@
     <extensions defaultExtensionNs="com.intellij">
         <configurationType implementation="com.github.eviltak.taef.TaefConfigurationType"/>
     </extensions>
+
+    <extensions defaultExtensionNs="cidr">
+        <testFrameworkDetector implementation="com.github.eviltak.taef.TaefTestFrameworkDetector"/>
+    </extensions>
 </idea-plugin>

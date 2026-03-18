@@ -17,3 +17,8 @@ set_target_properties(SampleTests PROPERTIES
     SUFFIX ".dll"
     PREFIX ""
 )
+
+# A non-test executable target — uses TAEF macros but TE.exe only loads DLLs,
+# so the framework detector should reject it.
+add_executable(SampleApp src/SampleApp.cpp)
+target_include_directories(SampleApp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

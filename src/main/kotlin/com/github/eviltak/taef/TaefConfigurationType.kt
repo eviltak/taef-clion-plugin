@@ -19,6 +19,9 @@ class TaefConfigurationType : CMakeRunConfigurationType(
         const val DISPLAY_NAME = "TAEF Test"
         const val DESCRIPTION = "Run TAEF tests via TE.exe"
         private const val ICON_PATH = "/icons/taef.svg"
+
+        fun getInstance(): TaefConfigurationType =
+            com.intellij.execution.configurations.ConfigurationTypeUtil.findConfigurationType(TaefConfigurationType::class.java)
     }
 
     override fun createEditor(project: Project): SettingsEditor<out CMakeAppRunConfiguration> =

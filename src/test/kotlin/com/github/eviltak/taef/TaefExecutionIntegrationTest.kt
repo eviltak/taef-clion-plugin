@@ -24,6 +24,14 @@ class TaefExecutionIntegrationTest : BasePlatformTestCase() {
         assertInstanceOf(config, TaefRunConfiguration::class.java)
     }
 
+    // --- Framework detector constants ---
+
+    fun testDetectorConstants() {
+        val detector = TaefTestFrameworkDetector()
+        assertEquals(TaefTestConstants.HEADER_PATTERN, detector.testHeaderName)
+        assertEquals(TaefTestConstants.ALL_TEST_MACROS, detector.testMacros)
+    }
+
     // --- TAEF fields persistence round-trip ---
 
     fun testTaefFieldsPersistence() {

@@ -1,0 +1,5 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="cidr.lang">
+        <testFramework implementation="com.github.eviltak.taef.TaefTestFramework"/>
+    </extensions>
+</idea-plugin>

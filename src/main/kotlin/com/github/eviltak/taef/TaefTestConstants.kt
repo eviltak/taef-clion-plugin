@@ -4,7 +4,7 @@ package com.github.eviltak.taef
  * TAEF test framework constants: header names, macro names, and protocol identifiers.
  */
 object TaefTestConstants {
-    const val HEADER_PATTERN = "\\bWexTestClass[.]h"
+    const val HEADER_PATTERN = "WexTestClass[.]h"
     const val HEADER_NAME = "WexTestClass.h"
     const val PROTOCOL_PREFIX = "taef"
     const val PATTERN_SEPARATOR = "*"

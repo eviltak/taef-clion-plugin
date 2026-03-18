@@ -30,6 +30,11 @@ dependencies {
         testFramework(TestFrameworkType.Platform)
     }
     testImplementation("junit:junit:4.13.2")
+    testImplementation("io.mockk:mockk:1.14.9") {
+        // MockK's transitive kotlinx-coroutines conflicts with the version
+        // bundled in the IntelliJ platform, causing test hangs/crashes
+        exclude(group = "org.jetbrains.kotlinx")
+    }
 }
 
 intellijPlatform {

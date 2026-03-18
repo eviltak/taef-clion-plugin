@@ -2,9 +2,14 @@
 // libraries), so the framework detector should reject this target.
 #include <WexTestClass.h>
 
-class ExecutableTests {
+class ExecutableTests
+{
     TEST_CLASS(ExecutableTests);
-    TEST_METHOD(ShouldNotBeDetected);
+
+    TEST_METHOD(ShouldNotBeDetected)
+    {
+        VERIFY_IS_TRUE(true);
+    }
 };
 
 int main() { return 0; }

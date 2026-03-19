@@ -5,14 +5,16 @@ import com.intellij.execution.configurations.CommandLineState
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
-import com.jetbrains.cidr.cpp.execution.CMakeLauncher
+import com.jetbrains.cidr.cpp.execution.testing.CMakeTestLauncher
 import com.jetbrains.cidr.cpp.toolchains.CPPEnvironment
 import java.io.File
 
 /**
- * Launcher for TAEF tests. Extends CMakeLauncher to get full CLion debug
- * support, but injects the test DLL path as the first program argument
- * and appends TAEF-specific flags.
+ * Launcher for TAEF tests. Extends [CMakeTestLauncher] (not plain CMakeLauncher)
+ * to get the SMRunner console wiring — CMakeTestLauncher overrides
+ * `createConsoleBuilder` to delegate `createConsole()` to
+ * [CidrTestCommandLineState.createConsole(CidrConsoleBuilder)], which creates
+ * an SMTRunnerConsoleView instead of a plain ConsoleViewImpl.
  *
  * The CMake target's product file (test DLL) is resolved by the parent class.
  * The executable (TE.exe) is set via ExecutableData on the run configuration.
@@ -20,7 +22,7 @@ import java.io.File
 class TaefLauncher(
     environment: ExecutionEnvironment,
     private val config: TaefRunConfiguration
-) : CMakeLauncher(environment, config) {
+) : CMakeTestLauncher(environment, config) {
 
     override fun getRunFileAndEnvironment(): Pair<File, CPPEnvironment> {
         val (parentRunFile, cppEnv) = super.getRunFileAndEnvironment()

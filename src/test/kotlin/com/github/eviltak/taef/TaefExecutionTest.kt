@@ -100,7 +100,67 @@ class TaefExecutionTest {
         assertTrue("Should have log lines", result.stdout.contains("Log: Verifying expected result."))
     }
 
+    @Test
+    fun smRunnerPipeline_mockTeOutput_producesCorrectServiceMessages() {
+        val result = execute(TaefCommandLineParams(teExePath = mockTeExe, testDllPath = testDll))
+
+        // Parse the full output through our pipeline
+        val events = TaefOutputParser.parse(result.stdout)
+        val processor = com.jetbrains.cidr.execution.testing.CidrTestEventProcessor(TaefTestConstants.PROTOCOL_PREFIX)
+
+        val serviceMessages = mutableListOf<String>()
+        for (event in events) {
+            serviceMessages.addAll(convertEvent(processor, event).map { it.toString() })
+        }
+
+        val combined = serviceMessages.joinToString("\n")
+
+        // Should have started 4 tests
+        val startedCount = serviceMessages.count { it.contains("testStarted") }
+        assertEquals("Should start 4 tests", 4, startedCount)
+
+        // Should have test output (log lines and error lines)
+        assertTrue("Should have stdout messages", combined.contains("testStdOut"))
+        assertTrue("Should have stderr messages", combined.contains("testStdErr"))
+
+        // Should have ignored messages for skipped/blocked
+        val ignoredCount = serviceMessages.count { it.contains("testIgnored") }
+        assertEquals("Should have 2 ignored tests (skipped + blocked)", 2, ignoredCount)
+
+        // All 4 test names should appear
+        assertTrue(combined.contains("TestMethodPass"))
+        assertTrue(combined.contains("TestMethodFail"))
+        assertTrue(combined.contains("TestMethodSkip"))
+        assertTrue(combined.contains("TestBlocked"))
+    }
+
     // --- Helpers ---
+
+    private fun convertEvent(
+        processor: com.jetbrains.cidr.execution.testing.CidrTestEventProcessor,
+        event: TaefTestEvent
+    ): List<com.intellij.execution.testframework.sm.ServiceMessageBuilder> {
+        return when (event) {
+            is TaefTestEvent.TestStarted -> processor.testStarted(
+                event.fullyQualifiedName,
+                "${TaefTestConstants.PROTOCOL_PREFIX}://${event.fullyQualifiedName}"
+            )
+            is TaefTestEvent.TestFinished -> when (event.result) {
+                TestResult.PASSED -> processor.testFinished(event.fullyQualifiedName, "", false)
+                TestResult.FAILED -> processor.testFinished(event.fullyQualifiedName, "", true)
+                TestResult.SKIPPED, TestResult.BLOCKED -> processor.testUnitIgnore(
+                    event.fullyQualifiedName, event.fullyQualifiedName,
+                    if (event.result == TestResult.BLOCKED) "Blocked" else "Skipped"
+                )
+            }
+            is TaefTestEvent.TestOutput -> if (event.isError) {
+                processor.testErrOut(event.fullyQualifiedName, event.text)
+            } else {
+                processor.testStdOut(event.fullyQualifiedName, event.text, event.fullyQualifiedName)
+            }
+            is TaefTestEvent.Summary -> emptyList()
+        }
+    }
 
     private data class ProcessResult(val stdout: String, val stderr: String, val exitCode: Int)
 

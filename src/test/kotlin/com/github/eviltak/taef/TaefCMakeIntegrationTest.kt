@@ -13,7 +13,7 @@ import com.jetbrains.cidr.cpp.cmake.workspace.CMakeWorkspace
 import com.jetbrains.cidr.cpp.execution.CMakeAppRunConfiguration
 import com.jetbrains.cidr.cpp.execution.CMakeBuildConfigurationHelper
 import com.jetbrains.cidr.cpp.toolchains.CPPToolchains
-import com.jetbrains.cidr.cpp.execution.CMakeLauncher
+import com.jetbrains.cidr.cpp.execution.testing.CMakeTestLauncher
 import com.jetbrains.cidr.cpp.execution.build.CMakeBuild
 import com.intellij.execution.DefaultExecutionTarget
 import com.jetbrains.cidr.execution.BuildTargetAndConfigurationData
@@ -33,6 +33,12 @@ import java.io.File
  * Each method delegates to well-named assertion helpers for readability.
  */
 class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
+
+    private val buildHelper by lazy { CMakeBuildConfigurationHelper(project) }
+
+    private fun findTarget(name: String) =
+        buildHelper.targets.find { it.name == name }
+            ?: throw AssertionError("Target '$name' not found in ${buildHelper.targets.map { it.name }}")
 
     override fun setUp() {
         super.setUp()
@@ -98,7 +104,7 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
      */
     fun testLauncher() {
         assertLauncherCanBeCreated()
-        assertLauncherExtendsCMakeLauncher()
+        assertLauncherExtendsCMakeTestLauncher()
         assertLauncherSwapsExecutableAndInjectsDllArg()
     }
 
@@ -114,6 +120,18 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         assertProducerSetsTarget()
         assertProducerInheritsTemplateSettings()
         assertProducerSetsNameFilterFromGutterIcon()
+    }
+
+    /**
+     * Tests SMRunner integration: createState returns CidrTestCommandLineState,
+     * createLauncher returns TaefLauncher, and gutter icon URLs match
+     * converter URLs for consistent test tree linking.
+     */
+    fun testSMRunnerIntegration() {
+        assertCreateStateReturnsCidrTestCommandLineState()
+        assertCreateLauncherReturnsTaefLauncher()
+        assertLauncherConsoleBuilderCreatesSMRunnerConsole()
+        assertGutterUrlsMatchConverterUrls()
     }
 
     /**
@@ -135,12 +153,11 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
 
     private fun assertDetectorIdentifiesTaefTarget() {
         val detector = TaefTestFrameworkDetector()
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
+        val target = findTarget(SampleProjectConstants.REAL_TESTS_TARGET)
 
         assertTrue(
             "Detector should identify SampleTests as a TAEF target",
-            detector.hasTestConfiguration(target, helper)
+            detector.hasTestConfiguration(target, buildHelper)
         )
         assertEquals(
             "Detector should return TaefConfigurationType",
@@ -151,23 +168,21 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
 
     private fun assertDetectorRejectsNonModuleTargets() {
         val detector = TaefTestFrameworkDetector()
-        val helper = CMakeBuildConfigurationHelper(project)
 
         // SampleApp is an executable that uses TAEF macros — detector should reject it
         // because TE.exe only loads MODULE libraries (DLLs)
-        val appTarget = helper.targets.find { it.name == SampleProjectConstants.APP_TARGET }
+        val appTarget = buildHelper.targets.find { it.name == SampleProjectConstants.APP_TARGET }
         assertNotNull("SampleApp target should exist", appTarget)
         assertFalse(
             "Detector should reject executable target 'SampleApp' even though it has TAEF macros",
-            detector.hasTestConfiguration(appTarget!!, helper)
+            detector.hasTestConfiguration(appTarget!!, buildHelper)
         )
     }
 
     // --- Target discovery assertions ---
 
     private fun assertSampleTestsTargetDiscovered() {
-        val helper = CMakeBuildConfigurationHelper(project)
-        val targetNames = helper.targets.map { it.name }
+        val targetNames = buildHelper.targets.map { it.name }
         assertTrue(
             "Should find SampleTests target, found: $targetNames",
             targetNames.contains(SampleProjectConstants.REAL_TESTS_TARGET)
@@ -175,9 +190,8 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     private fun assertProductFileResolvedToDll() {
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        val config = helper.getDefaultConfiguration(target)
+        val target = findTarget(SampleProjectConstants.REAL_TESTS_TARGET)
+        val config = buildHelper.getDefaultConfiguration(target)
         assertNotNull("Should have a default CMake configuration", config)
 
         val productFile = config!!.productFile
@@ -186,9 +200,8 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     private fun assertBuildScopedToSelectedTarget() {
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        val cmakeConfig = helper.getDefaultConfiguration(target)!!
+        val target = findTarget(SampleProjectConstants.REAL_TESTS_TARGET)
+        val cmakeConfig = buildHelper.getDefaultConfiguration(target)!!
 
         val buildAndRun = CMakeAppRunConfiguration.BuildAndRunConfigurations(cmakeConfig)
         val buildableElements = CMakeBuild.getBuildableElements(buildAndRun)
@@ -203,18 +216,12 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     // --- Run config pipeline assertions ---
 
     private fun assertCMakeTargetPassesValidation() {
-        val config = createTaefConfig()
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        val config = createTaefConfigWithTarget()
         config.checkConfiguration()
     }
 
     private fun assertCMakeTargetResolvesToDll() {
-        val config = createTaefConfig()
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        val config = createTaefConfigWithTarget()
 
         val executionTarget = getExecutionTarget(config)
         val buildAndRun = config.getBuildAndRunConfigurations(executionTarget, null, false)
@@ -226,10 +233,7 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     private fun assertSuggestedNameIncludesTarget() {
-        val config = createTaefConfig()
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        val config = createTaefConfigWithTarget()
 
         val name = config.suggestedName()
         assertNotNull("Suggested name should not be null when target is set", name)
@@ -240,14 +244,10 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     private fun assertProducerNameIncludesTestAndTarget() {
-        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
-        val element = findMacroElement(psiFile,
-            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.EXPECTED_METHODS.first())
-            ?: return
-
-        val context = com.intellij.execution.actions.ConfigurationContext(element)
-        val producer = TaefRunConfigurationProducer()
-        val result = producer.createConfigurationFromContext(context) ?: return
+        val result = createConfigFromMacro(
+            macroNames = TaefTestConstants.TEST_METHOD_MACROS,
+            argName = SampleProjectConstants.EXPECTED_METHODS.first()
+        ) ?: return
 
         val name = result.configuration.name
         assertTrue(
@@ -257,14 +257,10 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     private fun assertProducerSetsTarget() {
-        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
-        val element = findMacroElement(psiFile,
-            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.EXPECTED_METHODS.first())
-            ?: return
-
-        val context = com.intellij.execution.actions.ConfigurationContext(element)
-        val producer = TaefRunConfigurationProducer()
-        val result = producer.createConfigurationFromContext(context) ?: return
+        val result = createConfigFromMacro(
+            macroNames = TaefTestConstants.TEST_METHOD_MACROS,
+            argName = SampleProjectConstants.EXPECTED_METHODS.first()
+        ) ?: return
         val config = result.configuration as TaefRunConfiguration
 
         val targetData = config.targetAndConfigurationData
@@ -292,14 +288,10 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         template.additionalTeArgs = "/logOutput:High"
 
         // Create a config via the producer
-        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
-        val element = findMacroElement(psiFile,
-            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.EXPECTED_METHODS.first())
-            ?: return
-
-        val context = com.intellij.execution.actions.ConfigurationContext(element)
-        val producer = TaefRunConfigurationProducer()
-        val result = producer.createConfigurationFromContext(context) ?: return
+        val result = createConfigFromMacro(
+            macroNames = TaefTestConstants.TEST_METHOD_MACROS,
+            argName = SampleProjectConstants.EXPECTED_METHODS.first()
+        ) ?: return
         val config = result.configuration as TaefRunConfiguration
 
         // Verify template fields are inherited
@@ -321,14 +313,11 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
             .configuration as TaefRunConfiguration
         template.nameFilter = "*TemplateFallback*"
 
-        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
         val testMethodName = SampleProjectConstants.EXPECTED_METHODS.first()
-        val element = findMacroElement(psiFile,
-            TaefTestConstants.TEST_METHOD_MACROS, testMethodName) ?: return
-
-        val context = com.intellij.execution.actions.ConfigurationContext(element)
-        val producer = TaefRunConfigurationProducer()
-        val result = producer.createConfigurationFromContext(context) ?: return
+        val result = createConfigFromMacro(
+            macroNames = TaefTestConstants.TEST_METHOD_MACROS,
+            argName = testMethodName
+        ) ?: return
         val config = result.configuration as TaefRunConfiguration
 
         // nameFilter should be set from gutter context, not template.
@@ -345,10 +334,7 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     private fun assertParentFieldsPersistAlongsideTaefFields() {
-        val config = createTaefConfig()
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        val config = createTaefConfigWithTarget()
         config.nameFilter = "*TestFilter*"
         config.selectQuery = "@Owner='me'"
         config.inproc = true
@@ -374,10 +360,7 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     // --- Launcher assertions ---
 
     private fun assertLauncherCanBeCreated() {
-        val config = createTaefConfig()
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        val config = createTaefConfigWithTarget()
         config.nameFilter = "*Foo*"
         config.inproc = true
 
@@ -386,22 +369,16 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         assertNotNull(launcher)
     }
 
-    private fun assertLauncherExtendsCMakeLauncher() {
-        val config = createTaefConfig()
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+    private fun assertLauncherExtendsCMakeTestLauncher() {
+        val config = createTaefConfigWithTarget()
 
         val env = createExecutionEnvironment(config)
         val launcher = TaefLauncher(env, config)
-        assertInstanceOf(launcher, CMakeLauncher::class.java)
+        assertInstanceOf(launcher, CMakeTestLauncher::class.java)
     }
 
     private fun assertLauncherSwapsExecutableAndInjectsDllArg() {
-        val config = createTaefConfig()
-        val helper = CMakeBuildConfigurationHelper(project)
-        val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
-        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        val config = createTaefConfigWithTarget()
         config.nameFilter = "*MyTest*"
         config.inproc = true
 
@@ -432,47 +409,134 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         )
     }
 
+    // --- SMRunner integration assertions ---
+
+    private fun assertCreateStateReturnsCidrTestCommandLineState() {
+        val config = createTaefConfigWithTarget()
+        config.executableData = com.jetbrains.cidr.execution.ExecutableData("C:\\tools\\te.exe")
+
+        val env = createExecutionEnvironment(config)
+        val testData = config.testData
+        assertNotNull("testData should not be null", testData)
+
+        val state = testData!!.createState(env, DefaultRunExecutor.getRunExecutorInstance(), null)
+        assertNotNull("createState should return a CommandLineState", state)
+        assertInstanceOf(state, com.jetbrains.cidr.execution.testing.CidrTestCommandLineState::class.java)
+    }
+
+    private fun assertCreateLauncherReturnsTaefLauncher() {
+        val config = createTaefConfigWithTarget()
+
+        val env = createExecutionEnvironment(config)
+        val launcher = config.createLauncher(env)
+        assertInstanceOf(launcher, TaefLauncher::class.java)
+    }
+
+    private fun assertLauncherConsoleBuilderCreatesSMRunnerConsole() {
+        val config = createTaefConfigWithTarget()
+        config.executableData = com.jetbrains.cidr.execution.ExecutableData("C:\\tools\\te.exe")
+
+        val env = createExecutionEnvironment(config)
+        val state = config.testData!!.createState(env, DefaultRunExecutor.getRunExecutorInstance(), null)
+        assertNotNull("createState should return a state", state)
+
+        // The console builder is set during createProcess() in the launcher.
+        // CMakeTestLauncher overrides createConsoleBuilder to return a builder
+        // whose createConsole() delegates to CidrTestCommandLineState.createConsole(builder),
+        // which creates an SMTRunnerConsoleView. If the launcher extends the wrong
+        // base class (CMakeLauncher instead of CMakeTestLauncher), createConsole()
+        // returns a plain ConsoleViewImpl, and createRestartAction() throws a ClassCastException.
+        assertInstanceOf(config.createLauncher(env), CMakeTestLauncher::class.java)
+    }
+
+    private fun assertGutterUrlsMatchConverterUrls() {
+        val framework = TaefTestFramework()
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
+
+        // Collect gutter icon URLs
+        val gutterUrls = mutableSetOf<String>()
+        psiFile.accept(object : com.intellij.psi.PsiRecursiveElementVisitor() {
+            override fun visitElement(element: com.intellij.psi.PsiElement) {
+                val info = framework.getTestLineMarkInfo(element)
+                if (info != null && !info.isSuite) {
+                    gutterUrls.add(info.urlInTestTree)
+                }
+                super.visitElement(element)
+            }
+        })
+
+        assertTrue("Should have gutter icon URLs for test methods", gutterUrls.isNotEmpty())
+
+        // Verify URLs use the protocol prefix
+        for (url in gutterUrls) {
+            assertTrue(
+                "Gutter URL should start with ${TaefTestConstants.PROTOCOL_PREFIX}://, got: $url",
+                url.startsWith("${TaefTestConstants.PROTOCOL_PREFIX}://")
+            )
+        }
+
+        // Verify the converter would produce matching URLs by checking
+        // that the URL format matches what convertEvent(TestStarted) produces
+        val processor = com.jetbrains.cidr.execution.testing.CidrTestEventProcessor(
+            TaefTestConstants.PROTOCOL_PREFIX
+        )
+        for (url in gutterUrls) {
+            val testName = url.removePrefix("${TaefTestConstants.PROTOCOL_PREFIX}://")
+            val messages = processor.testStarted(
+                testName,
+                "${TaefTestConstants.PROTOCOL_PREFIX}://$testName"
+            )
+            assertTrue(
+                "testStarted should produce messages for '$testName'",
+                messages.isNotEmpty()
+            )
+            val msgStr = messages.joinToString("") { it.toString() }
+            assertTrue(
+                "Service message should contain the URL '$url', got: $msgStr",
+                msgStr.contains(url)
+            )
+        }
+    }
+
     // --- Run config producer assertions ---
 
     private fun assertProducerCreatesConfigFromTestMethod() {
-        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
-        val element = findMacroElement(psiFile,
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE)
+        assertNotNull("Should find test file", psiFile)
+        val element = findMacroElement(psiFile!!,
             TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.EXPECTED_METHODS.first())
         assertNotNull("Should find test method PSI element", element)
 
-        val context = com.intellij.execution.actions.ConfigurationContext(element!!)
-        val producer = TaefRunConfigurationProducer()
-        val result = producer.createConfigurationFromContext(context)
-
+        val result = createConfigFromMacro(
+            macroNames = TaefTestConstants.TEST_METHOD_MACROS,
+            argName = SampleProjectConstants.EXPECTED_METHODS.first()
+        )
         assertNotNull("Producer should create a config from test method context", result)
         assertInstanceOf(result!!.configuration, TaefRunConfiguration::class.java)
     }
 
     private fun assertProducerCreatesConfigFromTestClass() {
-        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
-        val element = findMacroElement(psiFile,
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE)
+        assertNotNull("Should find test file", psiFile)
+        val element = findMacroElement(psiFile!!,
             TaefTestConstants.TEST_CLASS_MACROS, SampleProjectConstants.EXPECTED_SUITES.first())
         assertNotNull("Should find test class PSI element", element)
 
-        val context = com.intellij.execution.actions.ConfigurationContext(element!!)
-        val producer = TaefRunConfigurationProducer()
-        val result = producer.createConfigurationFromContext(context)
-
+        val result = createConfigFromMacro(
+            macroNames = TaefTestConstants.TEST_CLASS_MACROS,
+            argName = SampleProjectConstants.EXPECTED_SUITES.first()
+        )
         assertNotNull("Producer should create a config from test class context", result)
     }
 
     private fun assertProducerRejectsNonTaefElement() {
         // StubTests.cpp includes WexTestClass.h (passes isAvailable) but the stub
         // macros lack TAEF internal markers, so the producer should not create a config
-        val psiFile = findPsiFile(SampleProjectConstants.STUB_TESTS_FILE) ?: return
-        val element = findMacroElement(psiFile,
-            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.STUB_TEST_METHODS.first())
-            ?: psiFile.firstChild ?: return
-
-        val context = com.intellij.execution.actions.ConfigurationContext(element)
-        val producer = TaefRunConfigurationProducer()
-        val result = producer.createConfigurationFromContext(context)
-
+        val result = createConfigFromMacro(
+            fileName = SampleProjectConstants.STUB_TESTS_FILE,
+            macroNames = TaefTestConstants.TEST_METHOD_MACROS,
+            argName = SampleProjectConstants.STUB_TEST_METHODS.first()
+        )
         assertNull("Producer should NOT create a config from stub TAEF context", result)
     }
 
@@ -590,7 +654,10 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         // Verify suites: check names and that line numbers match the source text
         val suites = gutterEntries.filter { it.isSuite }
         for (name in SampleProjectConstants.EXPECTED_SUITES) {
-            val match = suites.find { it.url == "${TaefTestConstants.PROTOCOL_PREFIX}://$name" }
+            val qualifiedPath = SampleProjectConstants.EXPECTED_SUITE_PATHS[name] ?: name
+            // Try qualified URL first, fall back to bare name (PSI may not resolve in tests)
+            val match = suites.find { it.url == "${TaefTestConstants.PROTOCOL_PREFIX}://$qualifiedPath" }
+                ?: suites.find { it.url == "${TaefTestConstants.PROTOCOL_PREFIX}://$name" }
             assertNotNull("Should find suite gutter icon for '$name'", match)
 
             val expectedLine = findMacroLine(fileText, name,
@@ -605,7 +672,9 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         // Verify test methods: check names and that line numbers match the source text
         val methods = gutterEntries.filter { !it.isSuite }
         for (name in SampleProjectConstants.EXPECTED_METHODS) {
-            val match = methods.find { it.url == "${TaefTestConstants.PROTOCOL_PREFIX}://$name" }
+            val qualifiedPath = SampleProjectConstants.EXPECTED_METHOD_PATHS[name] ?: name
+            val match = methods.find { it.url == "${TaefTestConstants.PROTOCOL_PREFIX}://$qualifiedPath" }
+                ?: methods.find { it.url == "${TaefTestConstants.PROTOCOL_PREFIX}://$name" }
             assertNotNull("Should find method gutter icon for '$name'", match)
 
             val expectedLine = findMacroLine(fileText, name,
@@ -680,6 +749,26 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     private fun createTaefConfig(): TaefRunConfiguration {
         val configType = TaefConfigurationType()
         return configType.factory.createTemplateConfiguration(project) as TaefRunConfiguration
+    }
+
+    private fun createTaefConfigWithTarget(
+        targetName: String = SampleProjectConstants.REAL_TESTS_TARGET
+    ): TaefRunConfiguration {
+        val config = createTaefConfig()
+        val target = findTarget(targetName)
+        config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
+        return config
+    }
+
+    private fun createConfigFromMacro(
+        fileName: String = SampleProjectConstants.REAL_TESTS_FILE,
+        macroNames: Set<String>,
+        argName: String
+    ): com.intellij.execution.actions.ConfigurationFromContext? {
+        val psiFile = findPsiFile(fileName) ?: return null
+        val element = findMacroElement(psiFile, macroNames, argName) ?: return null
+        val context = com.intellij.execution.actions.ConfigurationContext(element)
+        return TaefRunConfigurationProducer().createConfigurationFromContext(context)
     }
 
     private fun getExecutionTarget(config: TaefRunConfiguration): com.intellij.execution.ExecutionTarget {

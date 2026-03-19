@@ -1,12 +1,12 @@
 package com.github.eviltak.taef
 
 import com.intellij.execution.configurations.ConfigurationFactory
+import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.InvalidDataException
-import com.intellij.openapi.util.WriteExternalException
 import com.jetbrains.cidr.cpp.execution.CMakeAppRunConfiguration
 import com.jetbrains.cidr.cpp.execution.testing.CMakeTestRunConfiguration
+import com.jetbrains.cidr.execution.CidrLauncher
 import org.jdom.Element
 
 /**
@@ -52,6 +52,9 @@ class TaefRunConfiguration(
             else -> null
         }
     }
+
+    override fun createLauncher(environment: ExecutionEnvironment): CidrLauncher =
+        TaefLauncher(environment, this)
 
     override fun getConfigurationEditor(): SettingsEditor<out CMakeAppRunConfiguration> =
         TaefSettingsEditor(project, getHelper())

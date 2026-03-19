@@ -140,10 +140,58 @@ class TaefExecutionIntegrationTest : BasePlatformTestCase() {
         }
     }
 
+    // --- SMRunner wiring ---
+
+    fun testCreateLauncherReturnsTaefLauncher() {
+        val config = createConfig()
+        val env = createExecutionEnvironment(config)
+        val launcher = config.createLauncher(env)
+        assertInstanceOf(launcher, TaefLauncher::class.java)
+    }
+
+    fun testTestDataReturnsCorrectFrameworkId() {
+        val config = createConfig()
+        val testData = config.testData
+        assertNotNull("testData should not be null", testData)
+        assertEquals(TaefTestConstants.PROTOCOL_PREFIX, testData!!.testingFrameworkId)
+    }
+
+    fun testTestConsolePropertiesCreatesConverter() {
+        val props = createConsoleProperties()
+
+        val converter = props.createTestEventsConverter(
+            TaefTestConstants.PROTOCOL_PREFIX, props
+        )
+        assertInstanceOf(converter, TaefOutputToGeneralTestEventsConverter::class.java)
+    }
+
+    fun testTestConsolePropertiesHasLocator() {
+        val props = createConsoleProperties()
+        val locator = props.testLocator
+        assertNotNull("Test locator should not be null", locator)
+        assertInstanceOf(locator, TaefTestLocator::class.java)
+    }
+
     // --- Helpers ---
 
     private fun createConfig(): TaefRunConfiguration {
         val configType = TaefConfigurationType()
         return configType.factory.createTemplateConfiguration(project) as TaefRunConfiguration
+    }
+
+    private fun createConsoleProperties(): TaefTestConsoleProperties {
+        val config = createConfig()
+        val executor = com.intellij.execution.executors.DefaultRunExecutor.getRunExecutorInstance()
+        val target = com.intellij.execution.DefaultExecutionTarget.INSTANCE
+        return config.testData!!.createTestConsoleProperties(executor, target) as TaefTestConsoleProperties
+    }
+
+    private fun createExecutionEnvironment(config: TaefRunConfiguration): com.intellij.execution.runners.ExecutionEnvironment {
+        val executor = com.intellij.execution.executors.DefaultRunExecutor.getRunExecutorInstance()
+        val settings = com.intellij.execution.RunManager.getInstance(project)
+            .createConfiguration(config, config.factory!!)
+        return com.intellij.execution.runners.ExecutionEnvironmentBuilder
+            .create(executor, settings)
+            .build()
     }
 }

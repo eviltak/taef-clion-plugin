@@ -89,7 +89,7 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     fun testRunConfigPipeline() {
         assertCMakeTargetPassesValidation()
         assertCMakeTargetResolvesToDll()
-        assertSuggestedNameIncludesTaefPrefix()
+        assertSuggestedNameIncludesTarget()
         assertParentFieldsPersistAlongsideTaefFields()
     }
 
@@ -100,6 +100,20 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         assertLauncherCanBeCreated()
         assertLauncherExtendsCMakeLauncher()
         assertLauncherSwapsExecutableAndInjectsDllArg()
+    }
+
+    /**
+     * Tests RunConfigurationProducer: creates configs from PSI context,
+     * and rejects non-TAEF elements.
+     */
+    fun testRunConfigProducer() {
+        assertProducerCreatesConfigFromTestMethod()
+        assertProducerCreatesConfigFromTestClass()
+        assertProducerRejectsNonTaefElement()
+        assertProducerNameIncludesTestAndTarget()
+        assertProducerSetsTarget()
+        assertProducerInheritsTemplateSettings()
+        assertProducerSetsNameFilterFromGutterIcon()
     }
 
     /**
@@ -202,7 +216,8 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
         config.setTargetAndConfigurationData(BuildTargetAndConfigurationData(target, null as String?))
 
-        val buildAndRun = config.getBuildAndRunConfigurations(DefaultExecutionTarget.INSTANCE, null, false)
+        val executionTarget = getExecutionTarget(config)
+        val buildAndRun = config.getBuildAndRunConfigurations(executionTarget, null, false)
         assertNotNull("BuildAndRunConfigurations should be resolved", buildAndRun)
 
         val productFile = buildAndRun!!.buildConfiguration.productFile
@@ -210,7 +225,7 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         assertEquals("${SampleProjectConstants.REAL_TESTS_TARGET}.dll", productFile!!.name)
     }
 
-    private fun assertSuggestedNameIncludesTaefPrefix() {
+    private fun assertSuggestedNameIncludesTarget() {
         val config = createTaefConfig()
         val helper = CMakeBuildConfigurationHelper(project)
         val target = helper.targets.find { it.name == SampleProjectConstants.REAL_TESTS_TARGET }!!
@@ -219,12 +234,113 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         val name = config.suggestedName()
         assertNotNull("Suggested name should not be null when target is set", name)
         assertTrue(
-            "Suggested name should start with 'TAEF: ', got: $name",
-            name!!.startsWith("TAEF: ")
-        )
-        assertTrue(
             "Suggested name should contain target name, got: $name",
-            name.contains(SampleProjectConstants.REAL_TESTS_TARGET)
+            name!!.contains(SampleProjectConstants.REAL_TESTS_TARGET)
+        )
+    }
+
+    private fun assertProducerNameIncludesTestAndTarget() {
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
+        val element = findMacroElement(psiFile,
+            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.EXPECTED_METHODS.first())
+            ?: return
+
+        val context = com.intellij.execution.actions.ConfigurationContext(element)
+        val producer = TaefRunConfigurationProducer()
+        val result = producer.createConfigurationFromContext(context) ?: return
+
+        val name = result.configuration.name
+        assertTrue(
+            "Producer-generated name should contain test name, got: $name",
+            name.contains(SampleProjectConstants.EXPECTED_METHODS.first())
+        )
+    }
+
+    private fun assertProducerSetsTarget() {
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
+        val element = findMacroElement(psiFile,
+            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.EXPECTED_METHODS.first())
+            ?: return
+
+        val context = com.intellij.execution.actions.ConfigurationContext(element)
+        val producer = TaefRunConfigurationProducer()
+        val result = producer.createConfigurationFromContext(context) ?: return
+        val config = result.configuration as TaefRunConfiguration
+
+        val targetData = config.targetAndConfigurationData
+        assertNotNull(
+            "Producer-generated config should have a CMake target set",
+            targetData
+        )
+        assertNotNull("Target data should have a target", targetData!!.target)
+        assertEquals(
+            "Target should be ${SampleProjectConstants.REAL_TESTS_TARGET}",
+            SampleProjectConstants.REAL_TESTS_TARGET,
+            targetData.target!!.targetName
+        )
+    }
+
+    private fun assertProducerInheritsTemplateSettings() {
+        // Set up the template with all TAEF-specific fields
+        val factory = TaefConfigurationType.getInstance().factory
+        val templateSettings = com.intellij.execution.RunManager.getInstance(project)
+            .getConfigurationTemplate(factory)
+        val template = templateSettings.configuration as TaefRunConfiguration
+        val teExePath = "C:\\Program Files\\TAEF\\te.exe"
+        template.executableData = com.jetbrains.cidr.execution.ExecutableData(teExePath)
+        template.inproc = true
+        template.additionalTeArgs = "/logOutput:High"
+
+        // Create a config via the producer
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
+        val element = findMacroElement(psiFile,
+            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.EXPECTED_METHODS.first())
+            ?: return
+
+        val context = com.intellij.execution.actions.ConfigurationContext(element)
+        val producer = TaefRunConfigurationProducer()
+        val result = producer.createConfigurationFromContext(context) ?: return
+        val config = result.configuration as TaefRunConfiguration
+
+        // Verify template fields are inherited
+        assertNotNull("Should inherit executableData", config.executableData)
+        assertEquals(
+            "Should inherit TE.exe path",
+            java.nio.file.Paths.get(teExePath),
+            config.executableData?.path?.let { java.nio.file.Paths.get(it) }
+        )
+        assertTrue("Should inherit inproc", config.inproc)
+        assertEquals("Should inherit additionalTeArgs", "/logOutput:High", config.additionalTeArgs)
+    }
+
+    private fun assertProducerSetsNameFilterFromGutterIcon() {
+        // Set a template nameFilter that should be overridden by the gutter icon
+        val factory = TaefConfigurationType.getInstance().factory
+        val template = com.intellij.execution.RunManager.getInstance(project)
+            .getConfigurationTemplate(factory)
+            .configuration as TaefRunConfiguration
+        template.nameFilter = "*TemplateFallback*"
+
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
+        val testMethodName = SampleProjectConstants.EXPECTED_METHODS.first()
+        val element = findMacroElement(psiFile,
+            TaefTestConstants.TEST_METHOD_MACROS, testMethodName) ?: return
+
+        val context = com.intellij.execution.actions.ConfigurationContext(element)
+        val producer = TaefRunConfigurationProducer()
+        val result = producer.createConfigurationFromContext(context) ?: return
+        val config = result.configuration as TaefRunConfiguration
+
+        // nameFilter should be set from gutter context, not template.
+        // TestMethodPass is inside class SampleTestClass (no namespace).
+        assertFalse(
+            "nameFilter should NOT be the template fallback",
+            config.nameFilter.contains("TemplateFallback")
+        )
+        assertEquals(
+            "nameFilter should be qualified ClassName::MethodName",
+            "SampleTestClass::$testMethodName",
+            config.nameFilter
         )
     }
 
@@ -314,6 +430,72 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
             "Program params should contain /inproc, got: $programParams",
             programParams.contains("/inproc")
         )
+    }
+
+    // --- Run config producer assertions ---
+
+    private fun assertProducerCreatesConfigFromTestMethod() {
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
+        val element = findMacroElement(psiFile,
+            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.EXPECTED_METHODS.first())
+        assertNotNull("Should find test method PSI element", element)
+
+        val context = com.intellij.execution.actions.ConfigurationContext(element!!)
+        val producer = TaefRunConfigurationProducer()
+        val result = producer.createConfigurationFromContext(context)
+
+        assertNotNull("Producer should create a config from test method context", result)
+        assertInstanceOf(result!!.configuration, TaefRunConfiguration::class.java)
+    }
+
+    private fun assertProducerCreatesConfigFromTestClass() {
+        val psiFile = findPsiFile(SampleProjectConstants.REAL_TESTS_FILE) ?: return
+        val element = findMacroElement(psiFile,
+            TaefTestConstants.TEST_CLASS_MACROS, SampleProjectConstants.EXPECTED_SUITES.first())
+        assertNotNull("Should find test class PSI element", element)
+
+        val context = com.intellij.execution.actions.ConfigurationContext(element!!)
+        val producer = TaefRunConfigurationProducer()
+        val result = producer.createConfigurationFromContext(context)
+
+        assertNotNull("Producer should create a config from test class context", result)
+    }
+
+    private fun assertProducerRejectsNonTaefElement() {
+        // StubTests.cpp includes WexTestClass.h (passes isAvailable) but the stub
+        // macros lack TAEF internal markers, so the producer should not create a config
+        val psiFile = findPsiFile(SampleProjectConstants.STUB_TESTS_FILE) ?: return
+        val element = findMacroElement(psiFile,
+            TaefTestConstants.TEST_METHOD_MACROS, SampleProjectConstants.STUB_TEST_METHODS.first())
+            ?: psiFile.firstChild ?: return
+
+        val context = com.intellij.execution.actions.ConfigurationContext(element)
+        val producer = TaefRunConfigurationProducer()
+        val result = producer.createConfigurationFromContext(context)
+
+        assertNull("Producer should NOT create a config from stub TAEF context", result)
+    }
+
+    private fun findMacroElement(
+        file: OCFile, macroNames: Set<String>, argName: String
+    ): com.intellij.psi.PsiElement? {
+        var found: com.intellij.psi.PsiElement? = null
+        file.accept(object : com.intellij.psi.PsiRecursiveElementVisitor() {
+            override fun visitElement(element: com.intellij.psi.PsiElement) {
+                if (found != null) return
+                if (element is com.jetbrains.cidr.lang.psi.OCMacroCall) {
+                    val name = element.macroReferenceElement?.name
+                    val args = element.arguments
+                    if (name in macroNames && args != null && args.isNotEmpty() &&
+                        args[0].text?.trim() == argName) {
+                        found = element
+                        return
+                    }
+                }
+                super.visitElement(element)
+            }
+        })
+        return found
     }
 
     // --- PSI detection assertions ---
@@ -500,14 +682,22 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         return configType.factory.createTemplateConfiguration(project) as TaefRunConfiguration
     }
 
+    private fun getExecutionTarget(config: TaefRunConfiguration): com.intellij.execution.ExecutionTarget {
+        val targets = com.jetbrains.cidr.cpp.execution.CMakeExecutionTargetProvider()
+            .getTargets(project, config)
+        return targets.firstOrNull() ?: DefaultExecutionTarget.INSTANCE
+    }
+
     private fun createExecutionEnvironment(
         config: TaefRunConfiguration
     ): ExecutionEnvironment {
         val executor = DefaultRunExecutor.getRunExecutorInstance()
         val settings = RunManager.getInstance(project)
             .createConfiguration(config, config.factory!!)
+        val target = getExecutionTarget(config)
         return ExecutionEnvironmentBuilder
             .create(executor, settings)
+            .target(target)
             .build()
     }
 

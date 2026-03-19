@@ -1,18 +1,16 @@
 package com.github.eviltak.taef
 
-import com.intellij.execution.Executor
 import com.intellij.execution.configurations.ConfigurationFactory
-import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.InvalidDataException
 import com.intellij.openapi.util.WriteExternalException
 import com.jetbrains.cidr.cpp.execution.CMakeAppRunConfiguration
-import com.jetbrains.cidr.execution.CidrCommandLineState
+import com.jetbrains.cidr.cpp.execution.testing.CMakeTestRunConfiguration
 import org.jdom.Element
 
 /**
- * TAEF run configuration based on CMakeAppRunConfiguration.
+ * TAEF run configuration based on CMakeTestRunConfiguration.
  *
  * The CMake target selects the test DLL to build. TE.exe is specified via
  * the Executable field (supports both CMake executable targets and manual paths).
@@ -25,7 +23,7 @@ class TaefRunConfiguration(
     project: Project,
     factory: ConfigurationFactory,
     name: String
-) : CMakeAppRunConfiguration(project, factory, name) {
+) : CMakeTestRunConfiguration(project, factory, name, ::TaefTestRunConfigurationData) {
 
     var nameFilter: String = ""
     var selectQuery: String = ""
@@ -33,15 +31,30 @@ class TaefRunConfiguration(
     var additionalTeArgs: String = ""
 
     override fun suggestedName(): String? {
-        val targetName = suggestNameForTarget() ?: return null
-        return "TAEF: $targetName"
+        val targetName = suggestNameForTarget()
+        val testData = testData
+        val testName = testData?.let {
+            val suite = it.testSuite
+            val method = it.testName
+            when {
+                suite != null && method != null -> "$suite::$method"
+                suite != null -> suite
+                method != null -> method
+                it.testPattern != null -> it.testPattern
+                else -> null
+            }
+        }
+
+        return when {
+            testName != null && targetName != null -> "'$testName' in '$targetName'"
+            testName != null -> testName
+            targetName != null -> targetName
+            else -> null
+        }
     }
 
     override fun getConfigurationEditor(): SettingsEditor<out CMakeAppRunConfiguration> =
         TaefSettingsEditor(project, getHelper())
-
-    override fun getState(executor: Executor, environment: ExecutionEnvironment): CidrCommandLineState =
-        CidrCommandLineState(environment, TaefLauncher(environment, this))
 
     override fun writeExternal(element: Element) {
         super.writeExternal(element)

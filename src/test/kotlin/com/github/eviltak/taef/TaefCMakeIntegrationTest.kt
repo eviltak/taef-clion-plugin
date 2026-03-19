@@ -146,7 +146,9 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         assertRealHeaderTestObjectsDetected()
         assertStubHeaderTestObjectsRejected()
         assertGutterIconInfoForRealTests()
+        assertNoGutterIconInfoForStubTests()
         assertNoGutterIconInfoForNotTaefFile()
+        assertNoGutterIconInfoForExecutableTarget()
     }
 
     // --- Framework detector assertions ---
@@ -704,8 +706,23 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
     }
 
     private fun assertNoGutterIconInfoForNotTaefFile() {
+        assertNoGutterIcons(SampleProjectConstants.NOT_TAEF_FILE,
+            "Non-TAEF file (no WexTestClass.h include)")
+    }
+
+    private fun assertNoGutterIconInfoForStubTests() {
+        assertNoGutterIcons(SampleProjectConstants.STUB_TESTS_FILE,
+            "Stub TAEF file (WexTestClass.h without TAEF internal markers)")
+    }
+
+    private fun assertNoGutterIconInfoForExecutableTarget() {
+        assertNoGutterIcons(SampleProjectConstants.APP_FILE,
+            "Executable target (TE.exe only loads DLLs)")
+    }
+
+    private fun assertNoGutterIcons(fileName: String, description: String) {
         val framework = TaefTestFramework()
-        val psiFile = findPsiFile(SampleProjectConstants.NOT_TAEF_FILE) ?: return
+        val psiFile = findPsiFile(fileName) ?: return
 
         val gutterInfos = mutableListOf<com.jetbrains.cidr.lang.OCTestLineMarkInfo>()
         psiFile.accept(object : com.intellij.psi.PsiRecursiveElementVisitor() {
@@ -717,7 +734,8 @@ class TaefCMakeIntegrationTest : HeavyPlatformTestCase() {
         })
 
         assertTrue(
-            "Non-TAEF file should produce NO gutter icon info, got ${gutterInfos.size} entries",
+            "$description should produce NO gutter icons, got ${gutterInfos.size}: " +
+                gutterInfos.joinToString { it.urlInTestTree },
             gutterInfos.isEmpty()
         )
     }

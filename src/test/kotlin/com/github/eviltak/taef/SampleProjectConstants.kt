@@ -14,6 +14,7 @@ object SampleProjectConstants {
     const val REAL_TESTS_FILE = "SampleTests.cpp"
     const val STUB_TESTS_FILE = "StubTests.cpp"
     const val NOT_TAEF_FILE = "NotTaefTests.cpp"
+    const val APP_FILE = "SampleApp.cpp"
 
     // Expected test names in SampleTests.cpp — line numbers are verified
     // dynamically by searching the file text (see assertGutterIconInfoForRealTests)

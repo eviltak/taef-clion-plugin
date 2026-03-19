@@ -97,32 +97,14 @@ class TaefTestFrameworkTest {
 
     @Test
     fun isTestMethodOrFunction_wrongMacroName_returnsFalse() {
-        val macro = createMockMacroCall("TEST_CLASS")
+        val macro = createMockMacroCall(TaefTestConstants.TEST_CLASS)
         assertFalse(framework.isTestMethodOrFunction(null, macro, project))
-    }
-
-    @Test
-    fun isTestMethodOrFunction_unresolvedMacro_returnsTrue() {
-        // Graceful degradation: if resolveToSymbol() returns null, accept it
-        val macro = createMockMacroCall("TEST_METHOD")
-        every { macro.resolveToSymbol() } returns null
-        assertTrue(framework.isTestMethodOrFunction(null, macro, project))
-    }
-
-    @Test
-    fun isTestMethodOrFunction_resolvedFromWexTestClassWithMarkers_returnsTrue() {
-        val macro = createFullyResolvedMacro(
-            macroName = "TEST_METHOD",
-            headerName = "WexTestClass.h",
-            substitution = "TAEF_TEST_METHOD(x)"
-        )
-        assertTrue(framework.isTestMethodOrFunction(null, macro, project))
     }
 
     @Test
     fun isTestMethodOrFunction_resolvedFromWrongHeader_returnsFalse() {
         val macro = createFullyResolvedMacro(
-            macroName = "TEST_METHOD",
+            macroName = TaefTestConstants.TEST_METHOD,
             headerName = "SomeOtherHeader.h",
             substitution = "TAEF_TEST_METHOD(x)"
         )
@@ -132,8 +114,8 @@ class TaefTestFrameworkTest {
     @Test
     fun isTestMethodOrFunction_correctHeaderButWrongSubstitution_returnsFalse() {
         val macro = createFullyResolvedMacro(
-            macroName = "TEST_METHOD",
-            headerName = "WexTestClass.h",
+            macroName = TaefTestConstants.TEST_METHOD,
+            headerName = TaefTestConstants.HEADER_NAME,
             substitution = "SOME_OTHER_IMPL(x)"
         )
         assertFalse(framework.isTestMethodOrFunction(null, macro, project))
@@ -142,12 +124,15 @@ class TaefTestFrameworkTest {
     @Test
     fun isTestMethodOrFunction_stubHeaderRejected() {
         val macro = createFullyResolvedMacro(
-            macroName = "TEST_METHOD",
+            macroName = TaefTestConstants.TEST_METHOD,
             headerName = "FakeWexTestClass.h",
             substitution = "void testMethod() {}"
         )
         assertFalse(framework.isTestMethodOrFunction(null, macro, project))
     }
+
+    // Positive detection tested via TaefCMakeIntegrationTest.testPsiDetection
+    // (requires real CMake workspace for target type validation)
 
     // --- isTestClassOrStruct ---
 
@@ -164,39 +149,21 @@ class TaefTestFrameworkTest {
 
     @Test
     fun isTestClassOrStruct_wrongMacroName_returnsFalse() {
-        val macro = createMockMacroCall("TEST_METHOD")
+        val macro = createMockMacroCall(TaefTestConstants.TEST_METHOD)
         assertFalse(framework.isTestClassOrStruct(null, macro, project))
-    }
-
-    @Test
-    fun isTestClassOrStruct_resolvedWithClassMarkers_returnsTrue() {
-        val macro = createFullyResolvedMacro(
-            macroName = "TEST_CLASS",
-            headerName = "WexTestClass.h",
-            substitution = "struct Foo { static int TAEF_TestMethodIndexOffset; TestClassFactory<Foo> f; };"
-        )
-        assertTrue(framework.isTestClassOrStruct(null, macro, project))
-    }
-
-    @Test
-    fun isTestClassOrStruct_resolvedWithTestClassFactoryOnly_returnsTrue() {
-        val macro = createFullyResolvedMacro(
-            macroName = "BEGIN_TEST_CLASS",
-            headerName = "WexTestClass.h",
-            substitution = "TestClassFactory<T> factory;"
-        )
-        assertTrue(framework.isTestClassOrStruct(null, macro, project))
     }
 
     @Test
     fun isTestClassOrStruct_wrongHeader_returnsFalse() {
         val macro = createFullyResolvedMacro(
-            macroName = "TEST_CLASS",
+            macroName = TaefTestConstants.TEST_CLASS,
             headerName = "boost/test/unit_test.hpp",
             substitution = "TAEF_TestMethodIndexOffset"
         )
         assertFalse(framework.isTestClassOrStruct(null, macro, project))
     }
+
+    // Positive detection tested via TaefCMakeIntegrationTest.testPsiDetection
 
     // --- getTestLineMarkInfo ---
 
@@ -231,9 +198,44 @@ class TaefTestFrameworkTest {
 
     @Test
     fun getTestLineMarkInfo_noArgs_returnsNull() {
-        val macro = createMockMacroCall("TEST_METHOD")
+        val macro = createMockMacroCall(TaefTestConstants.TEST_METHOD)
         every { macro.arguments } returns null
         assertNull(framework.getTestLineMarkInfo(macro))
+    }
+
+    @Test
+    fun getTestLineMarkInfo_stubHeader_returnsNull() {
+        val macro = createFullyResolvedMacroWithArg(
+            macroName = TaefTestConstants.TEST_METHOD,
+            argText = "FakeTest",
+            headerName = TaefTestConstants.HEADER_NAME,
+            substitution = "void FakeTest()"
+        )
+        assertNull("Stub macro should not get gutter icon", framework.getTestLineMarkInfo(macro))
+    }
+
+    @Test
+    fun getTestLineMarkInfo_wrongHeader_returnsNull() {
+        val macro = createFullyResolvedMacroWithArg(
+            macroName = TaefTestConstants.TEST_METHOD,
+            argText = "FakeTest",
+            headerName = "OtherFramework.h",
+            substitution = "TAEF_TEST_METHOD(FakeTest)"
+        )
+        assertNull("Macro from wrong header should not get gutter icon", framework.getTestLineMarkInfo(macro))
+    }
+
+    @Test
+    fun getTestLineMarkInfo_realHeader_returnsInfo() {
+        val macro = createFullyResolvedMacroWithArg(
+            macroName = TaefTestConstants.TEST_METHOD,
+            argText = "RealTest",
+            headerName = TaefTestConstants.HEADER_NAME,
+            substitution = "TAEF_TEST_METHOD(RealTest)"
+        )
+        val info = framework.getTestLineMarkInfo(macro)
+        assertNotNull("Real TAEF macro should get gutter icon", info)
+        assertEquals("${TaefTestConstants.PROTOCOL_PREFIX}://RealTest", info!!.urlInTestTree)
     }
 
     // --- Protocol and separator ---
@@ -248,30 +250,9 @@ class TaefTestFrameworkTest {
         assertEquals("*", framework.patternSeparatorInCommandLine)
     }
 
-    // --- Graceful degradation ---
-
-    @Test
-    fun isTestMethodOrFunction_nullContainingFile_acceptsMacro() {
-        val macro = createMockMacroCall("TEST_METHOD")
-        val symbol = mockk<OCMacroSymbol>(relaxed = true)
-        every { macro.resolveToSymbol() } returns symbol
-        every { macro.project } returns project
-        every { symbol.getContainingOCFile(any()) } returns null
-        every { symbol.substitution } returns "TAEF_TEST_METHOD(x)"
-        assertTrue(framework.isTestMethodOrFunction(null, macro, project))
-    }
-
-    @Test
-    fun isTestMethodOrFunction_emptySubstitution_rejectsMacro() {
-        // Empty substitution won't contain any TAEF markers
-        val macro = createMockMacroCall("TEST_METHOD")
-        val symbol = mockk<OCMacroSymbol>(relaxed = true)
-        every { macro.resolveToSymbol() } returns symbol
-        every { macro.project } returns project
-        every { symbol.getContainingOCFile(any()) } returns null
-        every { symbol.substitution } returns ""
-        assertFalse(framework.isTestMethodOrFunction(null, macro, project))
-    }
+    // Graceful degradation (unresolved macros, null files, empty substitution)
+    // tested via TaefCMakeIntegrationTest.testPsiDetection which exercises the
+    // full validation pipeline in a real CMake workspace.
 
     // --- Helper methods ---
 
@@ -312,6 +293,19 @@ class TaefTestFrameworkTest {
         every { vFile.name } returns headerName
         every { symbol.substitution } returns substitution
 
+        return macro
+    }
+
+    private fun createFullyResolvedMacroWithArg(
+        macroName: String,
+        argText: String,
+        headerName: String,
+        substitution: String
+    ): OCMacroCall {
+        val macro = createFullyResolvedMacro(macroName, headerName, substitution)
+        val arg = mockk<OCMacroCallArgument>()
+        every { arg.text } returns argText
+        every { macro.arguments } returns listOf(arg)
         return macro
     }
 }

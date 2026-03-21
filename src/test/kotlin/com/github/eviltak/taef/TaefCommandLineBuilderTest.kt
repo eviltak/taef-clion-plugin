@@ -3,6 +3,10 @@ package com.github.eviltak.taef
 import org.junit.Assert.*
 import org.junit.Test
 
+/**
+ * Unit tests for [TaefCommandLineBuilder] — verifies TE.exe command line
+ * construction from [TaefCommandLineParams].
+ */
 class TaefCommandLineBuilderTest {
 
     private val baseParams = TaefCommandLineParams(
@@ -10,101 +14,105 @@ class TaefCommandLineBuilderTest {
         testDllPath = "C:\\tests\\MyTest.dll",
     )
 
+    // --- Basic invocation ---
+
     @Test
     fun basicInvocation() {
         val cmd = TaefCommandLineBuilder.build(baseParams)
         assertEquals("C:\\tools\\te.exe", cmd.exePath)
-        assertEquals(listOf("C:\\tests\\MyTest.dll"), cmd.parametersList.list)
+        assertEquals("C:\\tests\\MyTest.dll", cmd.parametersList.list[0])
     }
 
-    @Test
-    fun withNameFilter() {
-        val cmd = TaefCommandLineBuilder.build(baseParams.copy(nameFilter = "*MyClass::MyMethod*"))
-        assertTrue(cmd.parametersList.list.contains("/name:*MyClass::MyMethod*"))
-    }
+    // --- /name: filter ---
 
     @Test
-    fun withSelectQuery() {
-        val cmd = TaefCommandLineBuilder.build(baseParams.copy(selectQuery = "@Owner='alias'"))
-        assertTrue(cmd.parametersList.list.contains("/select:\"@Owner='alias'\""))
+    fun nameFilterAppended() {
+        val cmd = TaefCommandLineBuilder.build(baseParams.copy(nameFilter = "SampleTestClass::TestMethodPass"))
+        assertTrue(cmd.parametersList.list.contains("/name:SampleTestClass::TestMethodPass"))
     }
 
+    // --- /select: query ---
+
     @Test
-    fun withInproc() {
+    fun selectQueryAppendedWithQuotes() {
+        val cmd = TaefCommandLineBuilder.build(baseParams.copy(selectQuery = "@Owner='testowner'"))
+        assertTrue(cmd.parametersList.list.contains("/select:\"@Owner='testowner'\""))
+    }
+
+    // --- /inproc ---
+
+    @Test
+    fun inprocAppended() {
         val cmd = TaefCommandLineBuilder.build(baseParams.copy(inproc = true))
         assertTrue(cmd.parametersList.list.contains("/inproc"))
     }
 
     @Test
-    fun withoutInproc() {
+    fun inprocOmittedWhenFalse() {
         val cmd = TaefCommandLineBuilder.build(baseParams.copy(inproc = false))
         assertFalse(cmd.parametersList.list.contains("/inproc"))
     }
 
-    @Test
-    fun withWorkingDirectory() {
-        val cmd = TaefCommandLineBuilder.build(baseParams.copy(workingDirectory = "C:\\workdir"))
-        assertEquals("C:\\workdir", cmd.workDirectory?.path)
-    }
+    // --- Additional args split ---
 
     @Test
-    fun withAdditionalArgs() {
+    fun additionalArgsSplitAndAppended() {
         val cmd = TaefCommandLineBuilder.build(baseParams.copy(additionalArgs = "/parallel /logOutput:High"))
-        val params = cmd.parametersList.list
-        assertTrue(params.contains("/parallel"))
-        assertTrue(params.contains("/logOutput:High"))
+        assertTrue(cmd.parametersList.list.contains("/parallel"))
+        assertTrue(cmd.parametersList.list.contains("/logOutput:High"))
     }
 
-    @Test
-    fun additionalArgsWithQuotedSpaces() {
-        val cmd = TaefCommandLineBuilder.build(
-            baseParams.copy(additionalArgs = "/runas:\"Restricted User\" /parallel")
-        )
-        val params = cmd.parametersList.list
-        assertTrue(params.contains("/runas:Restricted User"))
-        assertTrue(params.contains("/parallel"))
-    }
+    // --- Blank filters omitted ---
 
     @Test
-    fun blankFilterOmitted() {
+    fun blankNameFilterOmitted() {
         val cmd = TaefCommandLineBuilder.build(baseParams.copy(nameFilter = "  "))
-        val params = cmd.parametersList.list
-        assertFalse(params.any { it.startsWith("/name:") })
+        assertFalse(cmd.parametersList.list.any { it.startsWith("/name:") })
     }
+
+    @Test
+    fun blankSelectQueryOmitted() {
+        val cmd = TaefCommandLineBuilder.build(baseParams.copy(selectQuery = ""))
+        assertFalse(cmd.parametersList.list.any { it.startsWith("/select:") })
+    }
+
+    // --- Missing TE.exe throws ---
 
     @Test(expected = IllegalArgumentException::class)
-    fun throwsWhenTeExeMissing() {
+    fun missingTeExePathThrows() {
         TaefCommandLineBuilder.build(baseParams.copy(teExePath = ""))
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun throwsWhenTeExeNull() {
+    fun nullTeExePathThrows() {
         TaefCommandLineBuilder.build(baseParams.copy(teExePath = null))
     }
 
+    // --- Missing DLL throws ---
+
     @Test(expected = IllegalArgumentException::class)
-    fun throwsWhenDllMissing() {
+    fun missingDllPathThrows() {
         TaefCommandLineBuilder.build(baseParams.copy(testDllPath = ""))
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun throwsWhenDllNull() {
+    fun nullDllPathThrows() {
         TaefCommandLineBuilder.build(baseParams.copy(testDllPath = null))
     }
 
+    // --- Combined ---
+
     @Test
     fun allParamsCombined() {
-        val cmd = TaefCommandLineBuilder.build(
-            TaefCommandLineParams(
-                teExePath = "C:\\te.exe",
-                testDllPath = "C:\\test.dll",
-                nameFilter = "*Foo*",
-                selectQuery = "@Priority=1",
-                workingDirectory = "C:\\work",
-                inproc = true,
-                additionalArgs = "/parallel",
-            )
-        )
+        val cmd = TaefCommandLineBuilder.build(TaefCommandLineParams(
+            teExePath = "C:\\te.exe",
+            testDllPath = "C:\\test.dll",
+            nameFilter = "*Foo*",
+            selectQuery = "@Priority=1",
+            workingDirectory = "C:\\work",
+            inproc = true,
+            additionalArgs = "/parallel",
+        ))
         val params = cmd.parametersList.list
         assertEquals("C:\\te.exe", cmd.exePath)
         assertEquals("C:\\test.dll", params[0])

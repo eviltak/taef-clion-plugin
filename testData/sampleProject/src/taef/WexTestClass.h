@@ -38,7 +38,7 @@ namespace WEX { namespace TestExecution {
 #define BEGIN_TEST_METHOD(methodName) \
     TAEF_TEST_METHOD(methodName)
 
-#define END_TEST_METHOD()
+#define END_TEST_METHOD() ;
 
 // TEST_CLASS is used inside a class body to register it with TAEF.
 // In real TAEF, it generates TestClassFactory and TAEF_TestMethodIndexOffset.
@@ -68,3 +68,27 @@ namespace WEX { namespace TestExecution {
 #define VERIFY_ARE_EQUAL(a, b) WEX::TestExecution::Verify::AreEqual(a, b)
 #define VERIFY_IS_TRUE(val)    WEX::TestExecution::Verify::IsTrue(val)
 #define VERIFY_IS_FALSE(val)   WEX::TestExecution::Verify::IsFalse(val)
+
+// Logging API stubs — in real TAEF these are in Wex.Logger.dll.
+// Stub implementations are no-ops; real output comes from TE.exe fixtures.
+namespace WEX { namespace Logging {
+    namespace TestResults {
+        enum Result { Passed, Failed, Skipped, Blocked };
+    }
+
+    struct Log {
+        static void Comment(const wchar_t*) {}
+        static void Warning(const wchar_t*) {}
+        static void Error(const wchar_t*) {}
+        static void Result(TestResults::Result) {}
+    };
+}}
+
+// TestData stub — in real TAEF this reads parameters from XML DataSource.
+// Stub always returns false (value not found); real values come from TE.exe.
+namespace WEX { namespace TestExecution {
+    struct TestData {
+        static bool TryGetValue(const wchar_t*, int& value) { value = 0; return false; }
+        static bool TryGetValue(const wchar_t*, const wchar_t*& value) { value = L""; return false; }
+    };
+}}

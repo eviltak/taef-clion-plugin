@@ -14,7 +14,7 @@
     public: \
         static int stub_marker
 
-#define END_TEST_CLASS()
+#define END_TEST_CLASS() ;
 
 #define TEST_CLASS_PROPERTY(name, value)
 
@@ -24,7 +24,7 @@
 #define BEGIN_TEST_METHOD(methodName) \
     void methodName()
 
-#define END_TEST_METHOD()
+#define END_TEST_METHOD() ;
 
 #define TEST_METHOD_PROPERTY(name, value)
 

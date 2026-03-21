@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<Data>
+    <Table Id="AdditionData">
+        <ParameterTypes>
+            <ParameterType Name="Left">int</ParameterType>
+            <ParameterType Name="Right">int</ParameterType>
+            <ParameterType Name="Expected">int</ParameterType>
+        </ParameterTypes>
+        <Row>
+            <Parameter Name="Left">1</Parameter>
+            <Parameter Name="Right">2</Parameter>
+            <Parameter Name="Expected">3</Parameter>
+        </Row>
+        <Row>
+            <Parameter Name="Left">10</Parameter>
+            <Parameter Name="Right">20</Parameter>
+            <Parameter Name="Expected">30</Parameter>
+        </Row>
+        <Row>
+            <Parameter Name="Left">0</Parameter>
+            <Parameter Name="Right">0</Parameter>
+            <Parameter Name="Expected">1</Parameter>
+        </Row>
+    </Table>
+</Data>

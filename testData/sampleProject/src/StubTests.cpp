@@ -9,11 +9,13 @@ class StubTestClass
 {
     TEST_CLASS(StubTestClass);
 
-    TEST_METHOD(StubTestMethod)
-    {
-        VERIFY_IS_TRUE(true);
-    }
+    TEST_METHOD(StubTestMethod);
 };
+
+void StubTestClass::StubTestMethod()
+{
+    VERIFY_IS_TRUE(true);
+}
 
 class AnotherStubClass
 {
@@ -22,7 +24,9 @@ class AnotherStubClass
 
     BEGIN_TEST_METHOD(AnotherStubMethod)
     END_TEST_METHOD()
-    {
-        VERIFY_ARE_EQUAL(1, 1);
-    }
 };
+
+void AnotherStubClass::AnotherStubMethod()
+{
+    VERIFY_ARE_EQUAL(1, 1);
+}

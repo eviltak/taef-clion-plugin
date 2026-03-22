@@ -5,7 +5,11 @@ import com.intellij.execution.RunManager
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ExecutionEnvironmentBuilder
+import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.project.Project
+import com.jetbrains.cidr.execution.testing.CidrTestEventProcessor
+import javax.swing.JComponent
+import javax.swing.JPanel
 
 /**
  * Shared helpers for platform tests that need TaefRunConfiguration,
@@ -29,5 +33,21 @@ object TaefTestUtil {
         val executor = DefaultRunExecutor.getRunExecutorInstance()
         val target = DefaultExecutionTarget.INSTANCE
         return config.testData!!.createTestConsoleProperties(executor, target) as TaefTestConsoleProperties
+    }
+
+    fun createConverter(project: Project): TaefOutputToGeneralTestEventsConverter {
+        val props = createConsoleProperties(project)
+        return TaefOutputToGeneralTestEventsConverter(
+            TaefTestConstants.PROTOCOL_PREFIX,
+            props,
+            CidrTestEventProcessor(TaefTestConstants.PROTOCOL_PREFIX),
+            MockConsole
+        )
+    }
+
+    internal object MockConsole : ExecutionConsole {
+        override fun getComponent(): JComponent = JPanel()
+        override fun getPreferredFocusableComponent(): JComponent = component
+        override fun dispose() {}
     }
 }

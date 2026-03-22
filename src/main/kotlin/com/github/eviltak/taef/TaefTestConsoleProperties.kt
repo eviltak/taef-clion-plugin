@@ -7,6 +7,7 @@ import com.intellij.execution.testframework.TestConsoleProperties
 import com.intellij.execution.testframework.sm.runner.OutputToGeneralTestEventsConverter
 import com.intellij.execution.testframework.sm.runner.SMTestLocator
 import com.jetbrains.cidr.execution.testing.CidrAbstractTestConsoleProperties
+import com.jetbrains.cidr.execution.testing.CidrTestEventProcessor
 import java.util.regex.Pattern
 
 /**
@@ -25,7 +26,12 @@ class TaefTestConsoleProperties(
         testFrameworkName: String,
         consoleProperties: TestConsoleProperties
     ): OutputToGeneralTestEventsConverter =
-        TaefOutputToGeneralTestEventsConverter(testFrameworkName, consoleProperties)
+        TaefOutputToGeneralTestEventsConverter(
+            testFrameworkName,
+            consoleProperties,
+            CidrTestEventProcessor(TaefTestConstants.PROTOCOL_PREFIX),
+            console
+        )
 
     override fun getTestLocator(): SMTestLocator = TaefTestLocator.INSTANCE
 

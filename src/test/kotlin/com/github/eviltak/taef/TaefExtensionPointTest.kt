@@ -2,6 +2,7 @@ package com.github.eviltak.taef
 
 import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationTypeUtil
+import com.intellij.execution.filters.ConsoleFilterProvider
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.cidr.execution.testing.CidrTestFrameworkDetector
 
@@ -79,5 +80,13 @@ class TaefExtensionPointTest : BasePlatformTestCase() {
     fun testConsolePropertiesHasLocator() {
         val props = TaefTestUtil.createConsoleProperties(project)
         assertInstanceOf(props.testLocator, TaefTestLocator::class.java)
+    }
+
+    // --- Console filter provider ---
+
+    fun testConsoleFilterProviderRegistered() {
+        val providers = ConsoleFilterProvider.FILTER_PROVIDERS.extensionList
+        assertTrue("TaefConsoleFilterProvider should be registered",
+            providers.any { it is TaefConsoleFilterProvider })
     }
 }

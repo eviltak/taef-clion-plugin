@@ -35,6 +35,16 @@ class TaefTestConsoleProperties(
 
     override fun getTestLocator(): SMTestLocator = TaefTestLocator.INSTANCE
 
-    override fun getAssertionPattern(): Pattern =
-        Pattern.compile("\\bVERIFY_\\w+\\b")
+    override fun getAssertionPattern(): Pattern = SOURCE_LINK_PATTERN
+
+    companion object {
+        /**
+         * Matches TAEF error source references: `[File: path, Function: name, Line: N]`
+         * or `[File: path, Line: N]`. Group 1 = file path, Group 2 = line number.
+         * Used by [CidrAbstractTestConsoleProperties] to create clickable source links.
+         */
+        internal val SOURCE_LINK_PATTERN: Pattern = Pattern.compile(
+            """\[File:\s*([^,\]]+)(?:,\s*Function:\s*[^,]+)?,\s*Line:\s*(\d+)]"""
+        )
+    }
 }

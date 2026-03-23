@@ -13,6 +13,7 @@
     <extensions defaultExtensionNs="com.intellij">
         <configurationType implementation="com.github.eviltak.taef.TaefConfigurationType"/>
         <runConfigurationProducer implementation="com.github.eviltak.taef.TaefRunConfigurationProducer"/>
+        <consoleFilterProvider implementation="com.github.eviltak.taef.TaefConsoleFilterProvider"/>
     </extensions>
 
     <extensions defaultExtensionNs="cidr">

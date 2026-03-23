@@ -601,4 +601,87 @@ GTest reference: `CidrGoogleTestCommandLineState` extends
 `SMTRunnerConsoleProperties`). It provides:
 - `createTestEventsConverter()` → your custom output parser
 - `getTestLocator()` → URL-to-source resolver
-- `getAssertionPattern()` → regex for assertion highlighting
+- `getAssertionPattern()` → regex for source link creation (see below)
+
+#### getAssertionPattern() Capture Group Contract
+
+The constructor creates a stack trace filter from `getAssertionPattern()`.
+The pattern MUST have:
+- **Group 1**: file path
+- **Group 2**: line number (1-based, converted to 0-based internally)
+
+The base class constructs `OpenFileHyperlinkInfo(project, file, lineNumber)`
+from these groups. If the pattern doesn't have two capture groups, the filter
+will silently fail — the matcher finds a match but `m.group(1)` returns null,
+so no link is created.
+
+```java
+// From CidrAbstractTestConsoleProperties constructor:
+String path = m.group(1);       // ← group 1 = file path
+String lineString = m.group(2); // ← group 2 = line number
+VirtualFile file = LocalFileSystem.getInstance().findFileByPath(normalizePath(path));
+```
+
+#### addStackTraceFilter vs ConsoleFilterProvider Scope
+
+`addStackTraceFilter(filter)` (called in the constructor) only applies to the
+**main Console Output tab**. It does NOT apply to per-test output panes in the
+SMRunner test tree.
+
+`ConsoleFilterProvider` (registered via `com.intellij.consoleFilterProvider`
+extension point) applies **globally** to all console views, including per-test
+output panes.
+
+If you need clickable links in per-test output (e.g., `[File: ..., Line: N]`),
+you must use `ConsoleFilterProvider`. Using both is fine — `addStackTraceFilter`
+handles the main console, `ConsoleFilterProvider` handles per-test panes.
+
+### 11.5 Converter Base Class Hierarchy (Siblings, NOT Parent-Child)
+
+Two similarly-named converter classes exist side-by-side under
+`com.jetbrains.cidr.execution.testing`. They are **siblings** extending
+different parents, not a parent-child chain:
+
+```
+OutputToGeneralTestEventsConverter              (IntelliJ Platform)
+├── CidrOutputToGeneralTestEventsConverterBase  (cidr-base)
+│   └── CidrFromTagInLineToGeneralTestEventsConverter  ← for tag-based parsers
+│       └── CidrGoogleOutputToGeneralTestEventsConverter
+└── CidrOutputToGeneralTestEventsConverter      (cidr-base, NO "Base" suffix)
+    └── (Boost, Catch2, etc.)
+```
+
+`CidrOutputToGeneralTestEventsConverter` (non-Base) provides:
+- `reopenSuiteIfAppropriate()`, `attachTestFramework()`
+- `myRunningTest`, `myPotentiallyFinishedSuite`, `myAssertionOutput`
+- Abstract: `suiteStarted`, `suiteFinished`, `processCollectedAssertionOutput`
+
+`CidrFromTagInLineToGeneralTestEventsConverter` (via Base) provides:
+- `myTestNameStack`, `myTestResultStack` for node ID management
+- `getCurrentNodeId()` → `"0/suite/test"`, `getLocationFromId()` → `"suite/test"`
+- `process(List<ServiceMessageBuilder>)` for feeding ##teamcity messages
+- `processServiceMessages` that intercepts ALL stdout/stderr → `processLine`
+- `myEventProcessor`, `myVisitor`, `myConsole`
+- Abstract: `processLine(Key, String)`
+
+**None of** `reopenSuiteIfAppropriate`, `attachTestFramework`, `myRunningTest`,
+`suiteStarted`/`suiteFinished` **exist in the CidrFromTagInLine branch**.
+Suite management must be done manually via `myTestNameStack`.
+
+### 11.6 processServiceMessages Consumes ALL Output
+
+`CidrFromTagInLineToGeneralTestEventsConverter.processServiceMessages` returns
+`true` for ALL stdout and stderr lines:
+
+```java
+if (outputType != null && (
+    ProcessOutputType.isStdout(outputType) || ProcessOutputType.isStderr(outputType))) {
+    processLine(outputType, text);
+    return true;  // ← always true for stdout/stderr
+}
+```
+
+This means **no output reaches the Console Output tab as uncaptured text** unless
+you explicitly forward it via `getProcessor()?.onUncapturedOutput(text, outputType)`.
+Lines outside test blocks (setup logs, framework header, cleanup) should be forwarded
+from `processLine` when the stream parser produces no events.

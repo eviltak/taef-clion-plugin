@@ -22,11 +22,18 @@ kotlin {
 
 dependencies {
     intellijPlatform {
-        clion("2025.1")
+        val localIdePath = providers.gradleProperty("clion.localIde.path")
+        if (localIdePath.isPresent) {
+            local(localIdePath.get())
+        } else {
+            clion("2025.3")
+        }
+
         bundledPlugin("com.intellij.clion")
-        bundledPlugin("com.intellij.cidr.base")
         bundledPlugin("com.intellij.cidr.lang")
+        bundledPlugin("com.intellij.cmake")
         bundledPlugin("com.intellij.nativeDebug")
+
         pluginVerifier()
         testFramework(TestFrameworkType.Platform)
     }
@@ -41,7 +48,7 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "251"
+            sinceBuild = "253"
             untilBuild = "253.*"
         }
     }

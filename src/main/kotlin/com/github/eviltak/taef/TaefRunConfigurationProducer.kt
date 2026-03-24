@@ -12,7 +12,7 @@ import com.jetbrains.cidr.execution.testing.CidrTestWithScopeElementsRunConfigur
  * Enables right-click → Run/Debug on TAEF test gutter icons.
  *
  * The base class handles all the context logic:
- * - Uses [TaefTestFramework] to extract the test element from the clicked PSI
+ * - Uses [TaefLanguageSupport] to extract the test element from the clicked PSI
  * - Resolves the CMake target via [CMakeTargetRunConfigurationBinder]
  * - Creates/matches [TaefRunConfiguration] instances
  */
@@ -23,7 +23,8 @@ class TaefRunConfigurationProducer : CidrTestWithScopeElementsRunConfigurationPr
     CidrTestScopeElement
 >(
     CMakeTargetRunConfigurationBinder.INSTANCE,
-    TaefTestFramework.getInstance()
+    TaefLanguageSupport.getInstance()
+        ?: error("No TaefLanguageSupport registered; requires classic or Nova language support module")
 ) {
     override fun getConfigurationFactory(): ConfigurationFactory =
         TaefConfigurationType.getInstance().factory

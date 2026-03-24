@@ -1,4 +1,10 @@
 <idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService
+            serviceInterface="com.github.eviltak.taef.TaefLanguageSupport"
+            serviceImplementation="com.github.eviltak.taef.TaefClassicLanguageSupport"/>
+    </extensions>
+
     <extensions defaultExtensionNs="cidr.lang">
         <testFramework implementation="com.github.eviltak.taef.TaefTestFramework"/>
     </extensions>

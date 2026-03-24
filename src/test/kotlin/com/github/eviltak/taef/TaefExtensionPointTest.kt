@@ -75,13 +75,6 @@ class TaefExtensionPointTest : BasePlatformTestCase() {
         assertInstanceOf(detector.testConfigurationType, TaefConfigurationType::class.java)
     }
 
-    // --- Console properties ---
-
-    fun testConsolePropertiesHasLocator() {
-        val props = TaefTestUtil.createConsoleProperties(project)
-        assertInstanceOf(props.testLocator, TaefTestLocator::class.java)
-    }
-
     // --- Console filter provider ---
 
     fun testConsoleFilterProviderRegistered() {

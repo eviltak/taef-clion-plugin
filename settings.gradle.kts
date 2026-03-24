@@ -10,3 +10,4 @@ plugins {
 }
 
 rootProject.name = "taef-clion-plugin"
+include("shared", "classic", "nova")

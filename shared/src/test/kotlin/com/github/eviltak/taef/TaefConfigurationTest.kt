@@ -87,4 +87,9 @@ class TaefConfigurationTest : BasePlatformTestCase() {
         val config = TaefTestUtil.createConfig(project)
         assertEquals("", config.buildTaefArgs())
     }
+
+    fun testConsolePropertiesHasLocator() {
+        val props = TaefTestUtil.createConsoleProperties(project)
+        assertInstanceOf(props.testLocator, TaefTestLocator::class.java)
+    }
 }

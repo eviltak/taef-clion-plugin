@@ -1,0 +1,10 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService
+            serviceInterface="com.github.eviltak.taef.TaefLanguageSupport"
+            serviceImplementation="com.github.eviltak.taef.TaefNovaLanguageSupport"/>
+        <runLineMarkerContributor
+            language="C++"
+            implementationClass="com.github.eviltak.taef.TaefNovaLineMarkerContributor"/>
+    </extensions>
+</idea-plugin>

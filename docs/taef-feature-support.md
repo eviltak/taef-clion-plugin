@@ -5,7 +5,18 @@ current implementation state after parser rewrite and converter refactor.
 
 ## Core Features
 
-### PSI Detection — Gutter icons and run config creation
+### Test Detection — Gutter icons and run config creation
+
+The plugin detects TAEF test macros on both CLion C++ engines. The detection
+mechanism differs per engine, but the result is the same: gutter icons and
+run configurations for test methods and classes.
+
+| Engine  | Mechanism                                          | Module    |
+|---------|----------------------------------------------------|-----------|
+| Classic | PSI-based (`TaefTestFramework` + `cidr.lang`)      | `classic` |
+| Nova    | Text-based (`TaefNovaLineMarkerContributor` + Radler) | `nova` |
+
+#### Supported macros
 
 | Macro                     | Supported |
 |---------------------------|-----------|

@@ -13,10 +13,9 @@ import com.jetbrains.cidr.execution.testing.CidrTestScopeElement
  * Exists as a separate class because a single class cannot be registered
  * as both an applicationService and an extension.
  */
-class TaefClassicLanguageSupport : TaefLanguageSupport {
-
-    private val framework: TaefTestFramework
-        get() = TaefTestFramework.getInstance()
+class TaefClassicLanguageSupport(
+    private val framework: TaefTestFramework = TaefTestFramework.getInstance()
+) : TaefLanguageSupport {
 
     override fun findTestObject(element: PsiElement): CidrTestScopeElement? =
         framework.findTestObject(element)

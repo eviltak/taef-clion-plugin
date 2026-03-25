@@ -1,3 +1,5 @@
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.intellij.platform.module")
@@ -26,6 +28,10 @@ dependencies {
         bundledPlugin("com.intellij.clion")
         bundledPlugin("com.intellij.cidr.lang")
         bundledPlugin("com.intellij.cmake")
+
+        testFramework(TestFrameworkType.Platform)
     }
     compileOnly(project(":shared"))
+    testImplementation(project(":shared"))
+    testImplementation("junit:junit:4.13.2")
 }

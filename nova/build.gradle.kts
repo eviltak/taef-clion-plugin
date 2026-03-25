@@ -28,11 +28,13 @@ dependencies {
         bundledPlugin("com.intellij.clion")
         bundledPlugin("org.jetbrains.plugins.clion.radler")
         bundledModule("intellij.rider.cpp.core.languages")
+        testBundledPlugin("com.intellij.cmake")
 
         testFramework(TestFrameworkType.Platform)
     }
     compileOnly(project(":shared"))
     testImplementation(project(":shared"))
+    testImplementation(project(":testUtil"))
     testImplementation("junit:junit:4.13.2")
 }
 

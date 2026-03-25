@@ -36,4 +36,5 @@ dependencies {
     testImplementation("io.mockk:mockk:1.14.9") {
         exclude(group = "org.jetbrains.kotlinx")
     }
+    testImplementation(project(":testUtil"))
 }

@@ -22,7 +22,8 @@ class TaefNovaLineMarkerContributorTest : BasePlatformTestCase() {
     private val contributor = TaefNovaLineMarkerContributor()
 
     private fun getInfoAtCaret(content: String): Any? {
-        myFixture.configureByText("test.cpp", content)
+        val fullContent = "#include <WexTestClass.h>\n$content"
+        myFixture.configureByText("test.cpp", fullContent)
         val element = myFixture.file.findElementAt(myFixture.caretOffset)
         return element?.let { contributor.getInfo(it) }
     }

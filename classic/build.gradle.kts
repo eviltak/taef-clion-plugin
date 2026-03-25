@@ -33,5 +33,6 @@ dependencies {
     }
     compileOnly(project(":shared"))
     testImplementation(project(":shared"))
+    testImplementation(project(":testUtil"))
     testImplementation("junit:junit:4.13.2")
 }

@@ -81,8 +81,80 @@ class TaefClassicEngineTest : BasePlatformTestCase() {
         assertNull(framework.getTestLineMarkInfo(null))
     }
 
-    // Note: Positive PSI detection tests (TEST_METHOD parsed as OCMacroCall)
-    // require C++ include resolution which needs a full CMake project
-    // configuration not available in BasePlatformTestCase. Positive cases
-    // are verified via manual testing with the sample project in testData/.
+    // --- TaefTestFramework positive cases ---
+    // Macros are defined inline so OCMacroCall PSI is created without
+    // needing CMake include resolution.
+
+    companion object {
+        // Inline TAEF header with the markers validateTaefElement looks for.
+        // isTaefMacro accepts unresolved macros (can't resolve → accept),
+        // so defining them inline with correct markers works.
+        private val TAEF_HEADER = """
+            #define TAEF_TEST_METHOD(name) void name()
+            #define TEST_METHOD(name) TAEF_TEST_METHOD(name)
+            #define BEGIN_TEST_METHOD(name) TAEF_TEST_METHOD(name)
+            namespace WEX { namespace TestExecution {
+                template<typename T> struct TestClassFactory {};
+            }}
+            #define TEST_CLASS(className) \
+                static WEX::TestExecution::TestClassFactory<className> s_TestClassFactory
+            #define BEGIN_TEST_CLASS(className) TEST_CLASS(className)
+        """.trimIndent()
+    }
+
+    private fun createTaefFile(testBody: String): com.intellij.psi.PsiFile =
+        myFixture.configureByText("TaefTest.cpp", "$TAEF_HEADER\n$testBody")
+
+    private fun findMacroCall(file: com.intellij.psi.PsiFile, macroName: String): com.intellij.psi.PsiElement? {
+        var found: com.intellij.psi.PsiElement? = null
+        file.accept(object : com.intellij.psi.PsiRecursiveElementVisitor() {
+            override fun visitElement(element: com.intellij.psi.PsiElement) {
+                if (element is com.jetbrains.cidr.lang.psi.OCMacroCall &&
+                    element.macroReferenceElement?.name == macroName) {
+                    found = element
+                    return
+                }
+                super.visitElement(element)
+            }
+        })
+        return found
+    }
+
+    fun testDetectsTestMethodMacro() {
+        val file = createTaefFile("TEST_METHOD(MyTest);")
+        val macro = findMacroCall(file, "TEST_METHOD")
+        assertNotNull("Should find TEST_METHOD OCMacroCall in PSI", macro)
+        assertTrue(framework.isTestMethodOrFunction(null, macro!!, project))
+        assertFalse(framework.isTestClassOrStruct(null, macro, project))
+    }
+
+    fun testDetectsTestClassMacro() {
+        val file = createTaefFile("TEST_CLASS(MyClass);")
+        val macro = findMacroCall(file, "TEST_CLASS")
+        assertNotNull("Should find TEST_CLASS OCMacroCall in PSI", macro)
+        assertTrue(framework.isTestClassOrStruct(null, macro!!, project))
+        assertFalse(framework.isTestMethodOrFunction(null, macro, project))
+    }
+
+    // Note: findTestObject and isAvailable delegate to the base class which
+    // requires importable macros (via include resolution). Inline #defines
+    // are not sufficient. These are verified via manual testing.
+
+    fun testGetTestLineMarkInfoForTestMethod() {
+        val file = createTaefFile("TEST_METHOD(MyTest);")
+        val macro = findMacroCall(file, "TEST_METHOD")
+        assertNotNull("Should find TEST_METHOD", macro)
+        val info = framework.getTestLineMarkInfo(macro!!)
+        assertNotNull("Should return line mark info", info)
+        assertFalse("TEST_METHOD should not be a suite", info!!.isSuite)
+    }
+
+    fun testGetTestLineMarkInfoForTestClass() {
+        val file = createTaefFile("TEST_CLASS(MyClass);")
+        val macro = findMacroCall(file, "TEST_CLASS")
+        assertNotNull("Should find TEST_CLASS", macro)
+        val info = framework.getTestLineMarkInfo(macro!!)
+        assertNotNull("Should return line mark info", info)
+        assertTrue("TEST_CLASS should be a suite", info!!.isSuite)
+    }
 }

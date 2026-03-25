@@ -62,3 +62,9 @@ intellijPlatform {
         }
     }
 }
+
+// Radler's backend freeze timeout detector causes test failures because
+// there is no Rider backend process in platform tests. Disable it.
+tasks.withType<Test> {
+    systemProperty("patch.engine.backend.freeze.timeout", "0")
+}

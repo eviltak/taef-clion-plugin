@@ -13,6 +13,12 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
  */
 class TaefNovaLineMarkerContributorTest : BasePlatformTestCase() {
 
+    override fun setUp() {
+        super.setUp()
+        com.intellij.codeInsight.CodeInsightSettings.getInstance()
+            .AUTO_POPUP_JAVADOC_INFO = false
+    }
+
     private val contributor = TaefNovaLineMarkerContributor()
 
     private fun getInfoAtCaret(content: String): Any? {

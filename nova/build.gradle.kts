@@ -34,3 +34,7 @@ dependencies {
     testImplementation(project(":shared"))
     testImplementation("junit:junit:4.13.2")
 }
+
+tasks.withType<Test> {
+    systemProperty("patch.engine.backend.freeze.timeout", "0")
+}

@@ -13,6 +13,15 @@ import com.jetbrains.cidr.execution.testing.CidrTestFrameworkDetector
  */
 class TaefExtensionPointTest : BasePlatformTestCase() {
 
+    override fun setUp() {
+        super.setUp()
+        // Radler modifies CodeInsightSettings.AUTO_POPUP_JAVADOC_INFO
+        // during application startup, which the test framework detects as
+        // "settings damage" in tearDown. Reset it after setUp.
+        com.intellij.codeInsight.CodeInsightSettings.getInstance()
+            .AUTO_POPUP_JAVADOC_INFO = false
+    }
+
     // --- Registration ---
 
     fun testConfigurationTypeRegistered() {

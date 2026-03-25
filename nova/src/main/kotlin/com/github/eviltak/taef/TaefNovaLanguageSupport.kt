@@ -4,6 +4,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.search.GlobalSearchScope
+import com.jetbrains.rider.cpp.fileType.lexer.CppTokenTypes
 import com.jetbrains.cidr.execution.testing.CidrTestScopeElement
 import com.jetbrains.cidr.execution.testing.CidrTestScopeElementImpl
 
@@ -28,8 +29,9 @@ class TaefNovaLanguageSupport : TaefLanguageSupport {
     }
 
     override fun isAvailable(file: PsiFile?): Boolean {
-        val text = file?.viewProvider?.document?.text ?: return false
-        return TaefNovaDetector.FILE_PATTERN.containsMatchIn(text)
+        if (file == null) return false
+        if (!TaefNovaDetector.fileIncludesTaefHeader(file)) return false
+        return TaefTargetUtil.isInDllTarget(file)
     }
 
     override fun getProtocolPrefix(): String = TaefTestConstants.PROTOCOL_PREFIX
@@ -41,38 +43,67 @@ class TaefNovaLanguageSupport : TaefLanguageSupport {
 }
 
 /**
- * Shared text-based TAEF macro detection for Nova.
+ * Token-based TAEF macro detection for Nova.
  * Used by both [TaefNovaLanguageSupport] and [TaefNovaLineMarkerContributor].
+ *
+ * Uses Nova's C++ lexer token types ([CppTokenTypes]) instead of regex
+ * for more robust detection — won't match macros inside comments or strings.
  */
 object TaefNovaDetector {
 
     data class TaefElementInfo(val testName: String, val isSuite: Boolean)
 
-    /** Matches TAEF macro invocations: `TEST_METHOD(Name)`, `BEGIN_TEST_CLASS(Name)`, etc. */
-    private val MACRO_PATTERN = Regex(
-        """(TEST_METHOD|BEGIN_TEST_METHOD|TEST_CLASS|BEGIN_TEST_CLASS)\s*\(\s*(\w+)"""
-    )
-
-    /** Quick check for any TAEF macro in a file's text. */
-    val FILE_PATTERN = Regex(
-        """(?:TEST_METHOD|BEGIN_TEST_METHOD|TEST_CLASS|BEGIN_TEST_CLASS)\s*\("""
-    )
+    /**
+     * Checks whether the file includes WexTestClass.h by scanning the PSI
+     * tree for HEADER_PATH_LITERAL tokens containing the header name.
+     */
+    fun fileIncludesTaefHeader(file: PsiFile): Boolean {
+        var found = false
+        file.accept(object : com.intellij.psi.PsiRecursiveElementVisitor() {
+            override fun visitElement(element: PsiElement) {
+                if (found) return
+                if (element.node?.elementType == CppTokenTypes.HEADER_PATH_LITERAL &&
+                    element.text.contains(TaefTestConstants.HEADER_NAME)) {
+                    found = true
+                    return
+                }
+                super.visitElement(element)
+            }
+        })
+        return found
+    }
 
     /**
-     * Detects a TAEF macro at the given PsiElement's line.
-     * Returns null if the element's line doesn't contain a TAEF macro.
+     * Detects a TAEF macro invocation at the given PsiElement.
+     *
+     * The element must be an IDENTIFIER token with a TAEF macro name,
+     * followed (after optional whitespace) by LPAR. The first IDENTIFIER
+     * inside the parens is extracted as the test name.
+     *
+     * Returns null if the element is not a TAEF macro call or if the
+     * file doesn't include WexTestClass.h.
      */
     fun detect(element: PsiElement): TaefElementInfo? {
-        val document = element.containingFile?.viewProvider?.document ?: return null
-        val offset = element.textRange?.startOffset ?: return null
-        val lineNumber = document.getLineNumber(offset)
-        val lineStart = document.getLineStartOffset(lineNumber)
-        val lineEnd = document.getLineEndOffset(lineNumber)
-        val lineText = document.getText(com.intellij.openapi.util.TextRange(lineStart, lineEnd))
+        if (element.node?.elementType != CppTokenTypes.IDENTIFIER) return null
+        val macroName = element.text ?: return null
+        if (macroName !in TaefTestConstants.ALL_TEST_MACROS) return null
 
-        val match = MACRO_PATTERN.find(lineText) ?: return null
-        val macroName = match.groupValues[1]
-        val testName = match.groupValues[2]
+        var sibling = element.nextSibling
+        while (sibling != null && CppTokenTypes.WHITESPACES.contains(sibling.node?.elementType)) {
+            sibling = sibling.nextSibling
+        }
+        if (sibling?.node?.elementType != CppTokenTypes.LPAR) return null
+
+        var arg = sibling.nextSibling
+        while (arg != null && CppTokenTypes.WHITESPACES.contains(arg.node?.elementType)) {
+            arg = arg.nextSibling
+        }
+        if (arg?.node?.elementType != CppTokenTypes.IDENTIFIER) return null
+        val testName = arg.text ?: return null
+
+        val file = element.containingFile ?: return null
+        if (!fileIncludesTaefHeader(file)) return null
+
         val isSuite = macroName in TaefTestConstants.TEST_CLASS_MACROS
         return TaefElementInfo(testName, isSuite)
     }

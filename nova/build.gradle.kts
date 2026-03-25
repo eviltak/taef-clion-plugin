@@ -27,6 +27,7 @@ dependencies {
 
         bundledPlugin("com.intellij.clion")
         bundledPlugin("org.jetbrains.plugins.clion.radler")
+        bundledModule("intellij.rider.cpp.core.languages")
 
         testFramework(TestFrameworkType.Platform)
     }
